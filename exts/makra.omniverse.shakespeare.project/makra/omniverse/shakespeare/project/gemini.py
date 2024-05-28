@@ -7,7 +7,7 @@ geminiConfig = helpers.loadConfig(f"{helpers.currPath()}/config.json")["gemini"]
 
 url = f"{geminiConfig["baseUrl"]}/{geminiConfig["model"]}:generateContent?key={geminiConfig["apiKey"]}"
 
-imgPath = f"{helpers.currPath()}/iphone.jpeg"
+imgPath = f"{helpers.currPath()}/imgs/sp.jpg"
 base64Img = ImageHandler.encodeImg(imgPath)
 
 headers = {
@@ -21,7 +21,7 @@ data = json.dumps({
                 {"text": geminiConfig["prompt"]},
                 {
                     "inline_data": {
-                        "mime_type": "image/jpeg",
+                        "mime_type": helpers.determineMimeType(imgPath),
                         "data": base64Img
                     }
                 }

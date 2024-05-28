@@ -19,4 +19,17 @@ def currPath():
         raise Exception("Could not find root directory")
     
     return str(currPath.parent.relative_to(root))
+
+def determineMimeType(fileName):
+    ext = fileName.split(".")[-1].lower()
+
+    if ext == 'jpg':
+        return 'image/jpeg'
+
+    supportedExts = ["jpg", "jpeg", "png", "webp", "heic", "heif"]
+    
+    if ext not in supportedExts:
+        raise Exception(f"Unsupported file extension: {ext}")
+    else:
+        return f"image/{ext}"
     
