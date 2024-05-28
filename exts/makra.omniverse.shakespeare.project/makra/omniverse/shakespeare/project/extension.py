@@ -1,7 +1,6 @@
 import omni.ext
 import omni.ui as ui
 
-
 # Functions and vars are available to other extension as usual in python: `example.python_ext.some_public_function(x)`
 # def some_public_function(x: int):
 #     print("[makra.omniverse.shakespeare.project] some_public_function was called with x: ", x)
