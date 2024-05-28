@@ -1,0 +1,9 @@
+{
+    "gemini" :
+    {
+        "baseUrl" : "https://generativelanguage.googleapis.com/v1beta/models",
+        "apiKey" : "AIzaSyAlabG-TbAU0dIKA4KbilwCOcs6N4WYZlQ",
+        "model" : "gemini-1.5-flash",
+        "prompt" : "Describe this scene as Shakespeare might have. Remember to use the language of the time. Make him sound confused if an object is not from his time."
+    }
+}
