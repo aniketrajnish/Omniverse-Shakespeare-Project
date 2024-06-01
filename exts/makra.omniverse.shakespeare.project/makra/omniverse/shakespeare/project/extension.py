@@ -3,6 +3,7 @@ import omni.ext
 import omni.ui as ui
 from omni.kit.window.file_importer import get_file_importer
 from .gemini import gemini
+from .convai import convai
 
 class ShakespeareProjectExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
@@ -38,11 +39,12 @@ class ShakespeareProjectExtension(omni.ext.IExt):
             filepath = os.path.join(dirname, selections[0])
             print(f"Selected file: {filepath}")
             self.processImage(filepath)
+            convai.appendToCharBackstory(self.geminiResponse)
 
     def processImage(self, imgPath):
         self.imgWidget.source_url = f"file:///{imgPath.replace(os.sep, '/')}" 
-        response = gemini.getGeminiResponse(imgPath)
-        print(f"Gemini Response: {response}")
+        self.geminiResponse = gemini.getGeminiResponse(imgPath)
+        print(f"Gemini Response: {self.geminiResponse}")
 
     def on_shutdown(self):
         print("[Shakespeare Project] Shutdown")
