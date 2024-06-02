@@ -45,7 +45,3 @@ name = "makra.omniverse.shakespeare.project"
 dependencies = [
     "omni.kit.ui_test" # UI testing extension
 ]
-
-[python.pipapi]
-requirements = ['PyAudio']
-use_online_index = true
