@@ -46,7 +46,6 @@ dependencies = [
     "omni.kit.ui_test" # UI testing extension
 ]
 
-# [python.pipapi]
-# requirements = ['google-generativeai']
-# use_online_index = true
-# extra_args = ["!pip install google-generativeai"]
+[python.pipapi]
+requirements = ['PyAudio']
+use_online_index = true

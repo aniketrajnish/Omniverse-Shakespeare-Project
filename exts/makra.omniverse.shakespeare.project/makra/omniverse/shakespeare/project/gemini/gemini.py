@@ -15,10 +15,10 @@ def loadGeminiConfig():
     
     try:        
         geminiConfig = {
-            'baseUrl': config.get('GEMINI', 'baseUrl'),
-            'apiKey': config.get('GEMINI', 'apiKey'),
-            'model': config.get('GEMINI', 'model'),
-            'prompt': config.get('GEMINI', 'prompt')
+            'baseUrl': config.get('GEMINI', 'BASE_URL'),
+            'apiKey': config.get('GEMINI', 'API_KEY'),
+            'model': config.get('GEMINI', 'MODEL'),
+            'prompt': config.get('GEMINI', 'PROMPT')
         }
     except configparser.NoOptionError as e:
         raise KeyError(f"Missing configuration key in gemini.env: {e}")
