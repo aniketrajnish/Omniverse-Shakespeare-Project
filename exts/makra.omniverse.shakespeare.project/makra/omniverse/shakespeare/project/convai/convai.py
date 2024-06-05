@@ -25,25 +25,6 @@ def loadConvaiConfig():
 
     return convaiConfig
 
-# def fetchCurrCharBackstory():
-#     config = loadConvaiConfig()
-#     url = "https://api.convai.com/character/get"
-#     payload = json.dumps({
-#         "charID": config['characterId']
-#     })
-#     headers = {
-#         'CONVAI-API-KEY': config['apiKey'],
-#         'Content-Type': 'application/json'
-#     }
-
-#     response = requests.post(url, headers=headers, data=payload)
-#     if response.status_code == 200:
-#         data = response.json()
-#         return data.get('backstory', "No backstory found.")
-#     else:
-#         print(f"Failed to fetch character details: {response.status_code} - {response.text}")
-#         return None
-
 def updateCharBackstory(newBackstory):
     config = loadConvaiConfig()
     url = "https://api.convai.com/character/update"
