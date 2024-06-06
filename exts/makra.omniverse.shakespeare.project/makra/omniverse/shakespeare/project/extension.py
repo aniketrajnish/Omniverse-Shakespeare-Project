@@ -8,15 +8,14 @@ from .convai import convai, extension
 
 class ShakespeareProjectExtension(omni.ext.IExt):
     def __init__(self):
-       self.initConvaiBackend()
+        pass
 
     def on_startup(self, ext_id):     
         self.initUI()
+        self.initConvaiBackend()
 
     def initConvaiBackend(self):
         self.convaiBackend = extension.ConvaiBackend()
-        self.userTranscriptLabel = None
-        self.shakespeareTranscriptLabel = None
         omni.kit.app.get_app().get_message_bus_event_stream().create_subscription_to_pop(
             self.onConvaiUpdate, name="convai_update"
         )
