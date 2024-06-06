@@ -25,8 +25,10 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                         self.selectImgBtn = ui.Button("Select Image", clicked_fn=self.selectImage, width=100, height=30)
                         ui.Spacer(width=10)
                         self.convaiBtn = ui.Button("Start Talking", clicked_fn=self.onconvaiBtnClick, width=100, height=30)
-                        ui.Spacer()                    
-                    self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)                        
+                        ui.Spacer()       
+                    ui.Spacer()             
+                    self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)
+                    ui.Spacer()                     
 
     def onconvaiBtnClick(self):
         if self.convaiExt and hasattr(self.convaiExt, 'IsCapturingAudio'):
