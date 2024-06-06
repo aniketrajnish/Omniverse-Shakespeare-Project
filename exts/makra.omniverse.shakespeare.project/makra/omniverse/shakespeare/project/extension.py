@@ -8,31 +8,32 @@ from .convai import convai, ConvaiExtension
 class ShakespeareProjectExtension(omni.ext.IExt):
     def __init__(self):
         super().__init__()
-        self.convai_ext = None 
+        self.convaiExt = None 
 
     def on_startup(self, ext_id):
         print("[Shakespeare Project] Startup")
         self.initUI()
-        self.convai_ext = ConvaiExtension.get_instance()
+        self.convaiExt = ConvaiExtension.get_instance()
 
     def initUI(self):
         self._window = ui.Window("Shakespeare Project", width=400, height=300)
         with self._window.frame:
             with ui.VStack():
-                self.selectImgBtn = ui.Button("Select Image", clicked_fn=self.selectImage, width=100, height=30)
+                with ui.HStack():
+                    self.selectImgBtn = ui.Button("Select Image", clicked_fn=self.selectImage, width=100, height=30)
+                    ui.Spacer(width=10)
+                    self.convaiBtn = ui.Button("Start Talking", clicked_fn=self.onconvaiBtnClick, width=100, height=30)
                 ui.Spacer(height=10) 
-                self.imgWidget = ui.Image(width=320, height=180, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)
-                ui.Spacer(height=10)
-                self.startTalkingBtn = ui.Button("Start Talking", clicked_fn=self.onStartTalkingBtnClick, width=100, height=30)
+                self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)
 
-    def onStartTalkingBtnClick(self):
-        if self.convai_ext and hasattr(self.convai_ext, 'IsCapturingAudio'):
-            if self.convai_ext.IsCapturingAudio:
-                self.convai_ext.stop_convai()
-                self.startTalkingBtn.text = "Start Talking"
+    def onconvaiBtnClick(self):
+        if self.convaiExt and hasattr(self.convaiExt, 'IsCapturingAudio'):
+            if self.convaiExt.IsCapturingAudio:
+                self.convaiExt.stop_convai()
+                self.convaiBtn.text = "Start Talking"
             else:
-                self.convai_ext.start_convai()
-                self.startTalkingBtn.text = "Stop"
+                self.convaiExt.start_convai()
+                self.convaiBtn.text = "Stop"
         else: 
             print("[ShakespeareProject] Convai extension not initialized properly.")
 
@@ -57,7 +58,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
             filepath = os.path.join(dirname, selections[0])
             print(f"Selected file: {filepath}")
             self.processImage(filepath)
-            if self.convai_ext:
+            if self.convaiExt:
                 convai.appendToCharBackstory(self.geminiResponse) 
 
     def processImage(self, imgPath):
