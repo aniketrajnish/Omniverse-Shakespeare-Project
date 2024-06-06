@@ -16,15 +16,17 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         self.convaiExt = ConvaiExtension.get_instance()
 
     def initUI(self):
-        self._window = ui.Window("Shakespeare Project", width=400, height=300)
+        self._window = ui.Window("Shakespeare AI", width=420, height=300)
         with self._window.frame:
-            with ui.VStack():
-                with ui.HStack():
-                    self.selectImgBtn = ui.Button("Select Image", clicked_fn=self.selectImage, width=100, height=30)
-                    ui.Spacer(width=10)
-                    self.convaiBtn = ui.Button("Start Talking", clicked_fn=self.onconvaiBtnClick, width=100, height=30)
-                ui.Spacer(height=10) 
-                self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)
+            with ui.Frame(padding=0):
+                with ui.VStack(spacing = 0):
+                    with ui.HStack():
+                        ui.Spacer()
+                        self.selectImgBtn = ui.Button("Select Image", clicked_fn=self.selectImage, width=100, height=30)
+                        ui.Spacer(width=10)
+                        self.convaiBtn = ui.Button("Start Talking", clicked_fn=self.onconvaiBtnClick, width=100, height=30)
+                        ui.Spacer()                    
+                    self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)                        
 
     def onconvaiBtnClick(self):
         if self.convaiExt and hasattr(self.convaiExt, 'IsCapturingAudio'):
@@ -46,7 +48,6 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                 ("jpg", "JPEG image"),
                 ("jpeg", "JPEG image"),
                 ("png", "PNG image"),
-                ("webp", "WebP image"),
                 ("heic", "HEIC image"),
                 ("heif", "HEIF image")
             ],

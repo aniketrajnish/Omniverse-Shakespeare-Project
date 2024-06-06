@@ -20,7 +20,7 @@ def determineMimeType(fileName):
     if ext == 'jpg':
         return 'image/jpeg'
 
-    supportedExts = ["jpg", "jpeg", "png", "webp", "heic", "heif"]
+    supportedExts = ["jpg", "jpeg", "png", "heic", "heif"]
     
     if ext not in supportedExts:
         raise Exception(f"Unsupported file extension: {ext}")
