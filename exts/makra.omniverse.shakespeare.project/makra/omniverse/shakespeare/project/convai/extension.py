@@ -29,10 +29,10 @@ RATE = 12000
 def log(text: str, warning: bool =False):
     print(f"[convai] {'[Warning]' if warning else ''} {text}")
 
-class ConvaiExtension(omni.ext.IExt):
+class ConvaiExtension:
     _instance = None
 
-    def __init__(self):
+    def __init__(self, convaiBtn, window):
         if ConvaiExtension._instance is not None:
             raise Exception("This class is a singleton!")
         else:
@@ -59,6 +59,11 @@ class ConvaiExtension(omni.ext.IExt):
         self.Mic_Lock = threading.Lock()
         self.UI_update_counter = 0
         self.on_new_update_sub = None
+        self.convaiBtn = convaiBtn
+        self.window = window
+
+        self.convaiBtn_text = "Start Talking"
+        self.convaiBtn_state = True
 
         self.read_config()
         self.create_channel()
@@ -66,9 +71,9 @@ class ConvaiExtension(omni.ext.IExt):
         log("ConvaiExtension initialized")
 
     @staticmethod
-    def get_instance():
+    def get_instance(convaiBtn, window):
         if ConvaiExtension._instance is None:
-            ConvaiExtension()
+            ConvaiExtension(convaiBtn, window)
         return ConvaiExtension._instance
 
     def on_startup(self, ext_id: str):
@@ -107,6 +112,9 @@ class ConvaiExtension(omni.ext.IExt):
         # Reset transcription UI text
         self.LastReadyTranscription = ""
 
+        with self.UI_Lock:
+            self.convaiBtn_text = "Stop"
+
         # Open Mic stream
         self.start_mic()
 
@@ -117,9 +125,17 @@ class ConvaiExtension(omni.ext.IExt):
         self.ConvaiGRPCGetResponseProxy = ConvaiGRPCGetResponseProxy(self)
 
     def stop_convai(self):
-        # Do one last mic read
-        self.read_mic_and_send_to_grpc(True) 
-        # Stop Mic
+        with self.UI_Lock:
+            self.convaiBtn_text = "Processing..."
+            self.convaiBtn_state = False
+
+        asyncio.ensure_future(self.process_remaining_audio())
+
+    async def process_remaining_audio(self):
+        await asyncio.sleep(0.1)
+
+        self.read_mic_and_send_to_grpc(True)
+
         self.stop_mic()
 
     def on_shutdown(self):
@@ -174,6 +190,19 @@ class ConvaiExtension(omni.ext.IExt):
                 self.ResponseTextBuffer = ""
         self.ConvaiAudioPlayer.append_to_stream(ReceivedAudio)
         return
+    
+    def _on_UI_update_event(self, e):
+        if self.UI_update_counter > 1000:
+            self.UI_update_counter = 0
+        self.UI_update_counter += 1
+
+        if self.UI_Lock.locked():
+            log("UI update event - UI_Lock is locked", 1)
+            return
+
+        with self.UI_Lock:
+            self.convaiBtn.text = self.convaiBtn_text
+            self.convaiBtn.enabled = self.convaiBtn_state
 
     def on_actions_received(self, Action: str):
         '''
@@ -193,12 +222,17 @@ class ConvaiExtension(omni.ext.IExt):
         '''
         self.SessionID = SessionID
 
-    def on_finish(self):
+    def on_finish(self, reset_UI = True):
         '''
 	    Called when the response stream is done
         '''
 
         self.ConvaiGRPCGetResponseProxy = None
+        with self.UI_Lock:
+            if reset_UI:
+                if reset_UI:
+                    self.convaiBtn_text = "Start Talking"
+                self.convaiBtn_state = True
         self.clean_grpc_stream()
         log("Received on_finish")
 
@@ -208,7 +242,14 @@ class ConvaiExtension(omni.ext.IExt):
         '''
         log(f"on_failure called with message: {ErrorMessage}", 1)
         self.stop_mic()
-        self.on_finish()
+
+        with self.UI_Lock:
+            self.convaiBtn_text = "Try Again"
+            self.convaiBtn_state = True
+        self.on_finish(reset_UI=False)
+
+        if self.window:
+            self._on_UI_update_event(None)
 
     def _on_tick(self):
         while self.Tick:

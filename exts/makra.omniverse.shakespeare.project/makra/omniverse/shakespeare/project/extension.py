@@ -11,9 +11,8 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         self.convaiExt = None 
 
     def on_startup(self, ext_id):
-        print("[Shakespeare Project] Startup")
+        print("[Shakespeare Project] Startup")     
         self.initUI()
-        self.convaiExt = ConvaiExtension.get_instance()
 
     def initUI(self):
         self._window = ui.Window("Shakespeare AI", width=420, height=300)
@@ -28,16 +27,23 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                         ui.Spacer()       
                     ui.Spacer()             
                     self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)
-                    ui.Spacer()                     
+                    ui.Spacer()   
+
+        self.convaiExt = ConvaiExtension.get_instance(self.convaiBtn, self._window)
+
+        if self.convaiExt.on_new_update_sub is None:
+            self.convaiExt.on_new_update_sub = (
+                omni.kit.app.get_app()
+                .get_update_event_stream()
+                .create_subscription_to_pop(self.convaiExt._on_UI_update_event, name="convai new UI update")
+            )                  
 
     def onconvaiBtnClick(self):
         if self.convaiExt and hasattr(self.convaiExt, 'IsCapturingAudio'):
             if self.convaiExt.IsCapturingAudio:
                 self.convaiExt.stop_convai()
-                self.convaiBtn.text = "Start Talking"
             else:
                 self.convaiExt.start_convai()
-                self.convaiBtn.text = "Stop"
         else: 
             print("[ShakespeareProject] Convai extension not initialized properly.")
 
