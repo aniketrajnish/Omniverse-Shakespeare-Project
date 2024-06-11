@@ -370,11 +370,7 @@ class ConvaiGRPCGetResponseProxy:
             time.sleep(0.1)
                 
         except Exception as e:
-            if 'response' in locals() and response is not None and response.HasField("audio_response"):
-                self.Parent.on_failure(f"gRPC - Exception caught in loop: {str(e)} - Stream Message: {response}")
-            else:
-                self.Parent.on_failure(f"gRPC - Exception caught in loop: {str(e)}")
-            traceback.print_exc()
+            self.Parent.on_failure(str(e))
             return
         self.Parent.on_finish()
 
