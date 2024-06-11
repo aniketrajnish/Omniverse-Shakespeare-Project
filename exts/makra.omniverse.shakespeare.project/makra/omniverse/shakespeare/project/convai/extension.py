@@ -132,7 +132,7 @@ class ConvaiExtension:
         asyncio.ensure_future(self.process_remaining_audio())
 
     async def process_remaining_audio(self):
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(2)
 
         self.read_mic_and_send_to_grpc(True)
 
