@@ -287,48 +287,45 @@ class ConvaiBackend:
             self.tickThread.join()            
 
 class ConvaiGRPCGetResponseProxy:
-    def __init__(self, Parent: ConvaiBackend):
-        self.Parent = Parent
+    def __init__(self, parent: ConvaiBackend):
+        self.parent = parent
 
-        self.AudioBuffer = deque(maxlen=4096*2)
-        self.InformOnDataReceived = False
+        self.audBuffer = deque(maxlen=4096*2)
         self.lastWriteReceived = False
         self.client = None
-        self.NumberOfAudioBytesSent = 0
+        self.noOfAudioBytesSent = 0
         self.call = None
-        self._write_task = None
-        self._read_task = None
 
         self.activate()
         log("ConvaiGRPCGetResponseProxy constructor")
 
     def activate(self):
-        if (len(self.Parent.apiKey) == 0):
-            self.Parent.onFail("API key is empty")
+        if (len(self.parent.apiKey) == 0):
+            self.parent.onFail("API key is empty")
             return
   
-        if (len(self.Parent.charId) == 0):
-            self.Parent.onFail("Character ID is empty")
+        if (len(self.parent.charId) == 0):
+            self.parent.onFail("Character ID is empty")
             return
   
-        if self.Parent.channel is None:
-            log("grpc - self.Parent.channel is None", 1)
-            self.Parent.onFail("gRPC channel was not created")
+        if self.parent.channel is None:
+            log("grpc - self.parent.channel is None", 1)
+            self.parent.onFail("gRPC channel was not created")
             return
 
-        self.client = convaiService.ConvaiServiceStub(self.Parent.channel)
+        self.client = convaiService.ConvaiServiceStub(self.parent.channel)
 
-        threading.Thread(target=self.init_stream).start()
+        threading.Thread(target=self.initStream).start()
 
-    def init_stream(self):
+    def initStream(self):
         log("grpc - stream initialized")
         try:
-            for response in self.client.GetResponse(self.create_getGetResponseRequests()):
+            for response in self.client.GetResponse(self.createGetResponseRequests()):
                 if response.HasField("audio_response"):
                     log("gRPC - audio_response: {} {} {}".format(response.audio_response.audio_config, response.audio_response.text_data, response.audio_response.end_of_response))
                     log("gRPC - session_id: {}".format(response.session_id))
-                    self.Parent.onSessionIdReceived(response.session_id)
-                    self.Parent.onDataReceived(
+                    self.parent.onSessionIdReceived(response.session_id)
+                    self.parent.onDataReceived(
                         response.audio_response.text_data,
                         response.audio_response.audio_data,
                         response.audio_response.audio_config.sample_rate_hertz,
@@ -336,23 +333,23 @@ class ConvaiGRPCGetResponseProxy:
 
                 elif response.HasField("action_response"):
                     log(f"gRPC - action_response: {response.action_response.action}")
-                    self.Parent.onActionsReceived(response.action_response.action)
+                    self.parent.onActionsReceived(response.action_response.action)
 
                 else:
                     log("Stream Message: {}".format(response))
             time.sleep(0.1)
                 
         except Exception as e:
-            self.Parent.onFail(str(e))
+            self.parent.onFail(str(e))
             return
-        self.Parent.onFin()
+        self.parent.onFin()
 
-    def create_initial_GetResponseRequest(self)-> convaiServiceMsg.GetResponseRequest:
+    def createInitGetResponseRequest(self)-> convaiServiceMsg.GetResponseRequest:
         action_config = convaiServiceMsg.ActionConfig(
             classification = 'singlestep',
             context_level = 1
         )
-        action_config.actions[:] = self.Parent.parseActions()
+        action_config.actions[:] = self.parent.parseActions()
         action_config.objects.append(
             convaiServiceMsg.ActionConfig.Object(
                 name = "dummy",
@@ -367,46 +364,46 @@ class ConvaiGRPCGetResponseProxy:
                 bio = "Person playing the game and asking questions."
             )
         )
-        get_response_config = convaiServiceMsg.GetResponseRequest.GetResponseConfig(
-                character_id = self.Parent.charId,
-                api_key = self.Parent.apiKey,
+        getResponseConfig = convaiServiceMsg.GetResponseRequest.GetResponseConfig(
+                character_id = self.parent.charId,
+                api_key = self.parent.apiKey,
                 audio_config = convaiServiceMsg.AudioConfig(
                     sample_rate_hertz = RATE
                 ),
                 action_config = action_config
             )
-        if self.Parent.sessionId and self.Parent.sessionId != "":
-            get_response_config.session_id = self.Parent.sessionId
-        return convaiServiceMsg.GetResponseRequest(get_response_config = get_response_config)
+        if self.parent.sessionId and self.parent.sessionId != "":
+            getResponseConfig.session_id = self.parent.sessionId
+        return convaiServiceMsg.GetResponseRequest(get_response_config = getResponseConfig)
 
-    def create_getGetResponseRequests(self)-> Generator[convaiServiceMsg.GetResponseRequest, None, None]:
-        req = self.create_initial_GetResponseRequest()
+    def createGetResponseRequests(self)-> Generator[convaiServiceMsg.GetResponseRequest, None, None]:
+        req = self.createInitGetResponseRequest()
         yield req
 
         while 1:
-            IsThisTheFinalWrite = False
+            isThisTheFinalWrite = False
             GetResponseData = None
 
             if (0): # check if this is a text request
                 pass
             else:
-                data, IsThisTheFinalWrite = self.consume_from_audio_buffer()
-                if len(data) == 0 and IsThisTheFinalWrite == False:
+                data, isThisTheFinalWrite = self.consumeFromAudioBuffer()
+                if len(data) == 0 and isThisTheFinalWrite == False:
                     time.sleep(0.05)
                     continue
-                self.NumberOfAudioBytesSent += len(data)
+                self.noOfAudioBytesSent += len(data)
                 GetResponseData = convaiServiceMsg.GetResponseRequest.GetResponseData(audio_data = data)
 
             req = convaiServiceMsg.GetResponseRequest(get_response_data = GetResponseData)
             yield req
 
-            if IsThisTheFinalWrite:
-                log(f"gRPC - Done Writing - {self.NumberOfAudioBytesSent} audio bytes sent")
+            if isThisTheFinalWrite:
+                log(f"gRPC - Done Writing - {self.noOfAudioBytesSent} audio bytes sent")
                 break
             time.sleep(0.1)
 
     def writeAudDataToSend(self, Data: bytes, lastWrite: bool):
-        self.AudioBuffer.append(Data)
+        self.audBuffer.append(Data)
         if lastWrite:
             self.lastWriteReceived = True
             log(f"gRPC lastWriteReceived")
@@ -414,24 +411,24 @@ class ConvaiGRPCGetResponseProxy:
     def finish_writing(self):
         self.writeAudDataToSend(bytes(), True)
 
-    def consume_from_audio_buffer(self):
-        Length = len(self.AudioBuffer)
-        IsThisTheFinalWrite = False
+    def consumeFromAudioBuffer(self):
+        length = len(self.audBuffer)
+        isThisTheFinalWrite = False
         data = bytes()
 
-        if Length:
-            data = self.AudioBuffer.pop()
+        if length:
+            data = self.audBuffer.pop()
         
-        if self.lastWriteReceived and Length == 0:
-            IsThisTheFinalWrite = True
+        if self.lastWriteReceived and length == 0:
+            isThisTheFinalWrite = True
         else:
-            IsThisTheFinalWrite = False
+            isThisTheFinalWrite = False
 
-        if IsThisTheFinalWrite:
+        if isThisTheFinalWrite:
             log(f"gRPC Consuming last mic write")
 
-        return data, IsThisTheFinalWrite
+        return data, isThisTheFinalWrite
     
     def __del__(self):
-        self.Parent = None
+        self.parent = None
         log("ConvaiGRPCGetResponseProxy Destructor")
