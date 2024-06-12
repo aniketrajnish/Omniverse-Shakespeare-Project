@@ -1,83 +1,79 @@
-# from .extension import ConvaiExtension, log
-# from test import ConvaiExtension, log
 import pyaudio
 from pydub import AudioSegment
 import io
 
-
 class ConvaiAudioPlayer:
-    def __init__(self, start_taking_callback, stop_talking_callback):
-        self.start_talking_callback = start_taking_callback
-        self.stop_talking_callback = stop_talking_callback
-        self.AudioSegment = None
+    def __init__(self, startTalkingCallback, stopTalkingCallback):
+        self.startTalkingCallback = startTalkingCallback
+        self.stopTalkingCallback = stopTalkingCallback
+        self.audSegment = None
         self.pa = pyaudio.PyAudio()
-        self.pa_stream = None
-        self.IsPlaying = False
+        self.paStream = None
+        self.isPlaying = False
     
     def appendToStream(self, data: bytes):
         segment = AudioSegment.from_wav(io.BytesIO(data)).fade_in(100).fade_out(100)
-        if self.AudioSegment is None:
-            self.AudioSegment = segment
+        if self.audSegment is None:
+            self.audSegment = segment
         else:
-            self.AudioSegment._data += segment._data
+            self.audSegment._data += segment._data
         self.play()
 
     def play(self):    
-        if self.IsPlaying:
+        if self.isPlaying:
             return
         print("ConvaiAudioPlayer - Started playing")
-        self.start_talking_callback()
-        self.pa_stream = self.pa.open(
-            format=pyaudio.get_format_from_width(self.AudioSegment.sample_width),
-            channels=self.AudioSegment.channels,
-            rate=self.AudioSegment.frame_rate,
+        self.startTalkingCallback()
+        self.paStream = self.pa.open(
+            format=pyaudio.get_format_from_width(self.audSegment.sample_width),
+            channels=self.audSegment.channels,
+            rate=self.audSegment.frame_rate,
             output=True, 
-            stream_callback=self.stream_callback
+            stream_callback=self.streamCallback
         )
-        self.IsPlaying = True
+        self.isPlaying = True
 
     def pause(self):
         '''
         Pause playing
         '''
-        self.IsPlaying = False
+        self.isPlaying = False
     
     def stop(self):
         '''
         Pause playing and clear audio
         '''
         self.pause()
-        self.AudioSegment = None
+        self.audSegment = None
 
-    def stream_callback(self, in_data, frame_count, time_info, status_flags):
-        if not self.IsPlaying:
+    def streamCallback(self, inData, frameCount, timeInfo, statusFlags):
+        if not self.isPlaying:
             frames = bytes()
         else:
-            frames = self.consume_frames(frame_count)
+            frames = self.consumeFrames(frameCount)
         
-        if self.AudioSegment and len(frames) < frame_count*self.AudioSegment.frame_width:
+        if self.audSegment and len(frames) < frameCount*self.audSegment.frame_width:
             print("ConvaiAudioPlayer - Stopped playing")
-            self.stop_talking_callback()
-            self.IsPlaying = False
+            self.stopTalkingCallback()
+            self.isPlaying = False
             return frames, pyaudio.paComplete
         else:
             return frames, pyaudio.paContinue
         
-    def consume_frames(self, count: int):
-        if self.AudioSegment is None:
+    def consumeFrames(self, count: int):
+        if self.audSegment is None:
             return bytes()
         
-        FrameEnd = self.AudioSegment.frame_width*count
-        if FrameEnd > len(self.AudioSegment._data):
+        frameEnd = self.audSegment.frame_width*count
+        if frameEnd > len(self.audSegment._data):
             return bytes()
 
             
-        FramesToReturn = self.AudioSegment._data[0:FrameEnd]
-        if FrameEnd == len(self.AudioSegment._data):
-            self.AudioSegment._data = bytes()
+        FramesToReturn = self.audSegment._data[0:frameEnd]
+        if frameEnd == len(self.audSegment._data):
+            self.audSegment._data = bytes()
         else:
-            self.AudioSegment._data = self.AudioSegment._data[FrameEnd:]
-            # print("self.AudioSegment._data = self.AudioSegment._data[FrameEnd:]")
+            self.audSegment._data = self.audSegment._data[frameEnd:]
 
         return FramesToReturn
 
@@ -85,8 +81,8 @@ if __name__ == '__main__':
     import time
     import pyaudio
     import grpc
-    from rpc import service_pb2 as convai_service_msg
-    from rpc import service_pb2_grpc as convai_service
+    from rpc import service_pb2 as convaiServiceMsg
+    from rpc import service_pb2_grpc as convaiService
     from typing import Generator
     import io
     from pydub import AudioSegment
@@ -105,75 +101,75 @@ if __name__ == '__main__':
                     rate=RATE,
                     input=True,
                     frames_per_buffer=CHUNK)
-    audio_player = ConvaiAudioPlayer(None)
+    convaiAudPlayer = ConvaiAudioPlayer(None)
 
-    def start_mic():
+    def startMic():
         global stream
         stream = PyAudio.open(format=FORMAT,
                         channels=CHANNELS,
                         rate=RATE,
                         input=True,
                         frames_per_buffer=CHUNK)
-        print("start_mic - Started Recording")
+        print("startMic - Started Recording")
 
-    def stop_mic():
+    def stopMic():
         global stream
         if stream:
             stream.stop_stream()
             stream.close()
         else:
-            print("stop_mic - could not close mic stream since it is None")
+            print("stopMic - could not close mic stream since it is None")
             return
-        print("stop_mic - Stopped Recording")
+        print("stopMic - Stopped Recording")
 
-    def getGetResponseRequests(api_key: str, character_id: str, session_id: str = "") -> Generator[convai_service_msg.GetResponseRequest, None, None]:
-        action_config = convai_service_msg.ActionConfig(
+    def getGetResponseRequests(apiKey: str, charId: str, sessionId: str = "") -> Generator[convaiServiceMsg.GetResponseRequest, None, None]:
+        action_config = convaiServiceMsg.ActionConfig(
             classification = 'multistep',
             context_level = 1
         )
         action_config.actions[:] = ["fetch", "jump", "dance", "swim"]
         action_config.objects.append(
-            convai_service_msg.ActionConfig.Object(
+            convaiServiceMsg.ActionConfig.Object(
                 name = "ball",
                 description = "A round object that can bounce around."
             )
         )
         action_config.objects.append(
-            convai_service_msg.ActionConfig.Object(
+            convaiServiceMsg.ActionConfig.Object(
                 name = "water",
                 description = "Liquid found in oceans, seas and rivers that you can swim in. You can also drink it."
             )
         )
         action_config.characters.append(
-            convai_service_msg.ActionConfig.Character(
+            convaiServiceMsg.ActionConfig.Character(
                 name = "User",
                 bio = "Person playing the game and asking questions."
             )
         )
         action_config.characters.append(
-            convai_service_msg.ActionConfig.Character(
+            convaiServiceMsg.ActionConfig.Character(
                 name = "Learno",
                 bio = "A medieval farmer from a small village."
             )
         )
-        get_response_config = convai_service_msg.GetResponseRequest.GetResponseConfig(
-                character_id = character_id,
-                api_key = api_key,
-                audio_config = convai_service_msg.AudioConfig(
+        get_response_config = convaiServiceMsg.GetResponseRequest.GetResponseConfig(
+                character_id = charId,
+                api_key = apiKey,
+                audio_config = convaiServiceMsg.AudioConfig(
                     sample_rate_hertz = 16000
                 ),
                 action_config = action_config
             )
         
-        if session_id != "":
-            get_response_config.session_id = session_id
-        yield convai_service_msg.GetResponseRequest(
+        if sessionId != "":
+            get_response_config.session_id = sessionId
+        yield convaiServiceMsg.GetResponseRequest(
             get_response_config = get_response_config    
         )
         for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
             data = stream.read(CHUNK)
-            yield convai_service_msg.GetResponseRequest(
-                get_response_data = convai_service_msg.GetResponseRequest.GetResponseData(
+            yield convaiServiceMsg.GetResponseRequest(
+                get_response_data = convaiServiceMsg.GetResponseRequest.GetResponseData(
                     audio_data = data
                 )
             )
@@ -183,16 +179,16 @@ if __name__ == '__main__':
 
     config = configparser.ConfigParser()
     config.read("exts\convai\convai\convai.env")
-    api_key = config.get("CONVAI", "API_KEY")
-    character_id = config.get("CONVAI", "CHARACTER_ID")
-    channel_address = config.get("CONVAI", "CHANNEL")
+    apiKey = config.get("CONVAI", "API_KEY")
+    charId = config.get("CONVAI", "CHARACTER_ID")
+    channelAddress = config.get("CONVAI", "CHANNEL")
 
-    channel = grpc.secure_channel(channel_address, grpc.ssl_channel_credentials())
-    client = convai_service.ConvaiServiceStub(channel)
-    for response in client.GetResponse(getGetResponseRequests(api_key, character_id)):
+    channel = grpc.secure_channel(channelAddress, grpc.ssl_channel_credentials())
+    client = convaiService.ConvaiServiceStub(channel)
+    for response in client.GetResponse(getGetResponseRequests(apiKey, charId)):
         if response.HasField("audio_response"):
             print("Stream Message: {} {} {}".format(response.session_id, response.audio_response.audio_config, response.audio_response.text_data))
-            audio_player.append_to_stream(response.audio_response.audio_data)
+            convaiAudPlayer.append_to_stream(response.audio_response.audio_data)
 
         else:
             print("Stream Message: {}".format(response))

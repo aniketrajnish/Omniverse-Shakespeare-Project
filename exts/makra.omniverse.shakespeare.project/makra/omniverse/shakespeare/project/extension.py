@@ -3,7 +3,7 @@ import omni.ext
 import omni.ui as ui
 from omni.kit.window.file_importer import get_file_importer
 from .gemini import gemini
-from .convai import convai, ConvaiBackend
+from .convai import convai
 
 class ShakespeareProjectExtension(omni.ext.IExt):
     def __init__(self):
@@ -29,7 +29,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                     self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)
                     ui.Spacer()   
 
-        self.convaiExt = ConvaiBackend.get_instance(self.convaiBtn, self._window)
+        self.convaiExt = convai.ConvaiBackend.get_instance(self.convaiBtn, self._window)
 
         if self.convaiExt.onNewUpdateSub is None:
             self.convaiExt.onNewUpdateSub = (
@@ -67,8 +67,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
             filepath = os.path.join(dirname, selections[0])
             print(f"Selected file: {filepath}")
             self.processImage(filepath)
-            if self.convaiExt:
-                convai.appendToCharBackstory(self.geminiResponse) 
+            convai.appendToCharBackstory(self.geminiResponse) 
 
     def processImage(self, imgPath):
         self.imgWidget.source_url = f"file:///{imgPath.replace(os.sep, '/')}" 
