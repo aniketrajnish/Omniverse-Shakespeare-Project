@@ -1,23 +1,9 @@
-import math, os
-import asyncio
-import numpy as np
-import omni.ext
-import carb.events
-import configparser
-import pyaudio
-import grpc
-from .rpc import service_pb2 as convai_service_msg
-from .rpc import service_pb2_grpc as convai_service
+import os, asyncio, omni.ext, carb.events, configparser, pyaudio, grpc
+from .rpc import service_pb2 as convaiServiceMsg, service_pb2_grpc as convaiService
 from .convai_audio_player import ConvaiAudioPlayer
 from typing import Generator
-import io
-from pydub import AudioSegment
-import threading
-import traceback
-import time
+import threading, time
 from collections import deque
-import random
-from functools import partial
 
 __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
@@ -29,293 +15,284 @@ RATE = 12000
 def log(text: str, warning: bool =False):
     print(f"[convai] {'[Warning]' if warning else ''} {text}")
 
-class ConvaiExtension:
+class ConvaiBackend:
     _instance = None
 
-    def __init__(self, convaiBtn, window):
-        if ConvaiExtension._instance is not None:
+    def __init__(self, convaiBtn, _window):
+        if ConvaiBackend._instance is not None:
             raise Exception("This class is a singleton!")
         else:
-            ConvaiExtension._instance = self
+            ConvaiBackend._instance = self
+        
+        self.convaiBtn = convaiBtn
+        self._window = _window        
 
-        self.IsCapturingAudio = False
-        self.on_new_frame_sub = None
-        self.channel_address = None
+        self.initVars()
+        self.readConfig()
+        self.createChannel()
+
+        log("ConvaiBackend initialized")
+
+    @staticmethod
+    def get_instance(convaiBtn, _window):
+        if ConvaiBackend._instance is None:
+            ConvaiBackend(convaiBtn, _window)
+        return ConvaiBackend._instance
+
+    def initVars(self):
+        self.isCapturingAudio = False
+        self.channelAddress = None
         self.channel = None
-        self.SessionID = None
+        self.sessionId = None
         self.channelState = grpc.ChannelConnectivity.IDLE
         self.client = None
-        self.ConvaiGRPCGetResponseProxy = None
-        self.PyAudio = pyaudio.PyAudio()
+        self.convaiGRPCGetResponseProxy = None
+        self.pyAudio = pyaudio.PyAudio()
         self.stream = None
-        self.Tick = False
-        self.TickThread = None
-        self.ConvaiAudioPlayer = ConvaiAudioPlayer(self._on_start_talk_callback, self._on_stop_talk_callback)
-        self.LastReadyTranscription = ""
+        self.tick = False
+        self.tickThread = None
+        self.convaiAudioPlayer = ConvaiAudioPlayer(self.onStartTalkCallback, self.onStopTalkCallback)
         self.ResponseTextBuffer = ""
         self.OldCharacterID = ""
 
-        self.UI_Lock = threading.Lock()
-        self.Mic_Lock = threading.Lock()
-        self.UI_update_counter = 0
-        self.on_new_update_sub = None
-        self.convaiBtn = convaiBtn
-        self.window = window
+        self.uiLock = threading.Lock()
+        self.micLock = threading.Lock()
+        self.uiUpdateCounter = 0
+        self.onNewUpdateSub = None
 
-        self.convaiBtn_text = "Start Talking"
-        self.convaiBtn_state = True
+        self.convaiBtnTxt = "Start Talking"
+        self.convaiBtnState = True
 
-        self.read_config()
-        self.create_channel()
-
-        log("ConvaiExtension initialized")
-
-    @staticmethod
-    def get_instance(convaiBtn, window):
-        if ConvaiExtension._instance is None:
-            ConvaiExtension(convaiBtn, window)
-        return ConvaiExtension._instance
-
-    def on_startup(self, ext_id: str):
-        log("ConvaiExtension started") 
-
-    def read_config(self):
+    def readConfig(self):
         config = configparser.ConfigParser()
         config.read(os.path.join(__location__, 'convai.env'))
-        self.api_key = config.get("CONVAI", "API_KEY")
-        self.character_id = config.get("CONVAI", "CHARACTER_ID")
-        self.channel_address = config.get("CONVAI", "CHANNEL")
-        self.actions_text = config.get("CONVAI", "ACTIONS")
 
-    def create_channel(self):
+        self.apiKey = config.get("CONVAI", "API_KEY")
+        self.charId = config.get("CONVAI", "CHARACTER_ID")
+        self.channelAddress = config.get("CONVAI", "CHANNEL")
+        self.actionsTxt = config.get("CONVAI", "ACTIONS")
+
+    def createChannel(self):
         if (self.channel):
             log("gRPC channel already created")
             return
         
-        self.channel = grpc.secure_channel(self.channel_address, grpc.ssl_channel_credentials())
+        self.channel = grpc.secure_channel(self.channelAddress, grpc.ssl_channel_credentials())
         log("Created gRPC channel")
 
-    def close_channel(self):
+    def closeChannel(self):
         if (self.channel):
             self.channel.close()
             self.channel = None
-            log("close_channel - Closed gRPC channel")
+            log("closeChannel - Closed gRPC channel")
         else:
-            log("close_channel - gRPC channel already closed")
+            log("closeChannel - gRPC channel already closed")
     
-    def start_convai(self):
-        # Reset Session ID if Character ID changes
-        if self.OldCharacterID != self.character_id:
-            self.OldCharacterID = self.character_id
-            self.SessionID = ""
+    def startConvai(self):
+        if self.OldCharacterID != self.charId:
+            self.OldCharacterID = self.charId
+            self.sessionId = ""
 
-        # Reset transcription UI text
-        self.LastReadyTranscription = ""
+        with self.uiLock:
+            self.convaiBtnTxt = "Stop"
 
-        with self.UI_Lock:
-            self.convaiBtn_text = "Stop"
+        self.startMic()
 
-        # Open Mic stream
-        self.start_mic()
+        self.convaiAudioPlayer.stop()
 
-        # Stop any on-going audio
-        self.ConvaiAudioPlayer.stop()
+        self.convaiGRPCGetResponseProxy = ConvaiGRPCGetResponseProxy(self)
 
-        # Create gRPC stream
-        self.ConvaiGRPCGetResponseProxy = ConvaiGRPCGetResponseProxy(self)
+    def stopConvai(self):
+        with self.uiLock:
+            self.convaiBtnTxt = "Processing..."
+            self.convaiBtnState = False
 
-    def stop_convai(self):
-        with self.UI_Lock:
-            self.convaiBtn_text = "Processing..."
-            self.convaiBtn_state = False
+        asyncio.ensure_future(self.processAudDelay())
 
-        asyncio.ensure_future(self.process_remaining_audio())
-
-    async def process_remaining_audio(self):
+    async def processAudDelay(self):
         await asyncio.sleep(2)
 
-        self.read_mic_and_send_to_grpc(True)
+        self.readMicAndSendToGrpc(True)
 
-        self.stop_mic()
+        self.stopMic()
 
     def on_shutdown(self):
-        self.clean_grpc_stream()
-        self.close_channel()
-        self.stop_tick()
+        self.cleanGrpcStream()
+        self.closeChannel()
+        self.stopTick()
 
-        log("ConvaiExtension shutdown")
+        log("ConvaiBackend shutdown")
 
-    def start_mic(self):
-        if self.IsCapturingAudio == True:
-            log("start_mic - mic is already capturing audio", 1)
+    def startMic(self):
+        if self.isCapturingAudio == True:
+            log("startMic - mic is already capturing audio", 1)
             return
-        self.stream = self.PyAudio.open(format=FORMAT,
+        self.stream = self.pyAudio.open(format=FORMAT,
                         channels=CHANNELS,
                         rate=RATE,
                         input=True,
                         frames_per_buffer=CHUNK)
-        self.IsCapturingAudio = True
-        self.start_tick()
-        log("start_mic - Started Recording")
+        self.isCapturingAudio = True
+        self.startTick()
+        log("startMic - Started Recording")
 
-    def stop_mic(self):
-        if self.IsCapturingAudio == False:
-            log("stop_mic - mic has not started yet", 1)
+    def stopMic(self):
+        if self.isCapturingAudio == False:
+            log("stopMic - mic has not started yet", 1)
             return
         
-        self.stop_tick()
+        self.stopTick()
 
         if self.stream:
             self.stream.stop_stream()
             self.stream.close()
         else:
-            log("stop_mic - could not close mic stream since it is None", 1)
+            log("stopMic - could not close mic stream since it is None", 1)
         
-        self.IsCapturingAudio = False
-        log("stop_mic - Stopped Recording")
+        self.isCapturingAudio = False
+        log("stopMic - Stopped Recording")
 
-    def clean_grpc_stream(self):
-        if self.ConvaiGRPCGetResponseProxy:
-            self.ConvaiGRPCGetResponseProxy.Parent = None
-            del self.ConvaiGRPCGetResponseProxy
-        self.ConvaiGRPCGetResponseProxy = None
+    def cleanGrpcStream(self):
+        if self.convaiGRPCGetResponseProxy:
+            self.convaiGRPCGetResponseProxy.Parent = None
+            del self.convaiGRPCGetResponseProxy
+        self.convaiGRPCGetResponseProxy = None
 
-    def on_data_received(self, ReceivedText: str, ReceivedAudio: bytes, SampleRate: int, IsFinal: bool):
+    def onDataReceived(self, receivedText: str, receivedAudio: bytes, SampleRate: int, isFinal: bool):
         '''
 	    Called when new text and/or Audio data is received
         '''
-        self.ResponseTextBuffer += str(ReceivedText)
-        if IsFinal:
-            with self.UI_Lock:
+        self.ResponseTextBuffer += str(receivedText)
+        if isFinal:
+            with self.uiLock:
                 self.ResponseTextBuffer = ""
-        self.ConvaiAudioPlayer.append_to_stream(ReceivedAudio)
+        self.convaiAudioPlayer.appendToStream(receivedAudio)
         return
     
-    def _on_UI_update_event(self, e):
-        if self.UI_update_counter > 1000:
-            self.UI_update_counter = 0
-        self.UI_update_counter += 1
+    def onUIUpdateEvent(self, e):
+        if self.uiUpdateCounter > 1000:
+            self.uiUpdateCounter = 0
+        self.uiUpdateCounter += 1
 
-        if self.UI_Lock.locked():
-            log("UI update event - UI_Lock is locked", 1)
+        if self.uiLock.locked():
+            log("UI update event - uiLock is locked", 1)
             return
 
-        with self.UI_Lock:
-            self.convaiBtn.text = self.convaiBtn_text
-            self.convaiBtn.enabled = self.convaiBtn_state
+        with self.uiLock:
+            self.convaiBtn.text = self.convaiBtnTxt
+            self.convaiBtn.enabled = self.convaiBtnState
 
-    def on_actions_received(self, Action: str):
+    def onActionsReceived(self, action: str):
         '''
 	    Called when actions are received
         '''
-        self.UI_Lock.acquire()
-        for InputAction in self.parse_actions():
-            if Action.find(InputAction) >= 0:
-                self.fire_event(InputAction)
-                self.UI_Lock.release()
+        self.uiLock.acquire()
+        for InputAction in self.parseActions():
+            if action.find(InputAction) >= 0:
+                self.fireEvent(InputAction)
+                self.uiLock.release()
                 return
-        self.UI_Lock.release()
+        self.uiLock.release()
         
-    def on_session_ID_received(self, SessionID: str):
+    def onSessionIdReceived(self, sessionId: str):
         '''
 	    Called when new SessionID is received
         '''
-        self.SessionID = SessionID
+        self.sessionId = sessionId
 
-    def on_finish(self, reset_UI = True):
+    def onFin(self, resetUI = True):
         '''
 	    Called when the response stream is done
         '''
 
-        self.ConvaiGRPCGetResponseProxy = None
-        with self.UI_Lock:
-            if reset_UI:
-                if reset_UI:
-                    self.convaiBtn_text = "Start Talking"
-                self.convaiBtn_state = True
-        self.clean_grpc_stream()
-        log("Received on_finish")
+        self.convaiGRPCGetResponseProxy = None
+        with self.uiLock:
+            if resetUI:
+                if resetUI:
+                    self.convaiBtnTxt = "Start Talking"
+                self.convaiBtnState = True
+        self.cleanGrpcStream()
+        log("Received onFin")
 
-    def on_failure(self, ErrorMessage: str):
+    def onFail(self, ErrorMessage: str):
         '''
         Called when there is an unsuccessful response
         '''
-        log(f"on_failure called with message: {ErrorMessage}", 1)
-        self.stop_mic()
+        log(f"onFail called with message: {ErrorMessage}", 1)
+        self.stopMic()
 
-        with self.UI_Lock:
-            self.convaiBtn_text = "Try Again"
-            self.convaiBtn_state = True
-        self.on_finish(reset_UI=False)
+        with self.uiLock:
+            self.convaiBtnTxt = "Try Again"
+            self.convaiBtnState = True
+        self.onFin(resetUI=False)
 
-        if self.window:
-            self._on_UI_update_event(None)
+        if self._window:
+            self.onUIUpdateEvent(None)
 
-    def _on_tick(self):
-        while self.Tick:
+    def onTick(self):
+        while self.tick:
             time.sleep(0.1)
-            if self.IsCapturingAudio == False or self.ConvaiGRPCGetResponseProxy is None:
+            if self.isCapturingAudio == False or self.convaiGRPCGetResponseProxy is None:
                 continue
-            self.read_mic_and_send_to_grpc(False)
+            self.readMicAndSendToGrpc(False)
 
-    def _on_start_talk_callback(self):
-        self.fire_event("start")
+    def onStartTalkCallback(self):
+        self.fireEvent("start")
         log("Character Started Talking")
 
-    def _on_stop_talk_callback(self):
-        self.fire_event("stop")
+    def onStopTalkCallback(self):
+        self.fireEvent("stop")
         log("Character Stopped Talking")
     
-    def read_mic_and_send_to_grpc(self, LastWrite):
-        with self.Mic_Lock:
+    def readMicAndSendToGrpc(self, lastWrite):
+        with self.micLock:
             if self.stream:
                 data = self.stream.read(CHUNK)
             else:
-                log("read_mic_and_send_to_grpc - could not read mic stream since it is none", 1)
+                log("readMicAndSendToGrpc - could not read mic stream since it is none", 1)
                 data = bytes()
 
-            if self.ConvaiGRPCGetResponseProxy:
-                self.ConvaiGRPCGetResponseProxy.write_audio_data_to_send(data, LastWrite)
+            if self.convaiGRPCGetResponseProxy:
+                self.convaiGRPCGetResponseProxy.writeAudDataToSend(data, lastWrite)
             else:
-                log("read_mic_and_send_to_grpc - ConvaiGRPCGetResponseProxy is not valid", 1)
+                log("readMicAndSendToGrpc - ConvaiGRPCGetResponseProxy is not valid", 1)
 
-    def fire_event(self, event_name):
-        def registered_event_name(event_name):
+    def fireEvent(self, eventName):
+        def resgisteredEventName(eventName):
             """Returns the internal name used for the given custom event name"""
-            n = "omni.graph.action." + event_name
+            n = "omni.graph.action." + eventName
             return carb.events.type_from_string(n)
 
-        reg_event_name = registered_event_name(event_name)
-        message_bus = omni.kit.app.get_app().get_message_bus_event_stream()
+        regEventName = resgisteredEventName(eventName)
+        msgBus = omni.kit.app.get_app().get_message_bus_event_stream()
 
-        message_bus.push(reg_event_name, payload={})
+        msgBus.push(regEventName, payload={})
 
-    def parse_actions(self):
-        actions = ["None"] + self.actions_text.split(',')
+    def parseActions(self):
+        actions = ["None"] + self.actionsTxt.split(',')
         actions = [a.lstrip(" ").rstrip(" ") for a in actions]
         return actions
 
-    def start_tick(self):
-        if self.Tick:
+    def startTick(self):
+        if self.tick:
             log("Tick already started", 1)
             return
-        self.Tick = True
-        self.TickThread = threading.Thread(target=self._on_tick)
-        self.TickThread.start()
+        self.tick = True
+        self.tickThread = threading.Thread(target=self.onTick)
+        self.tickThread.start()
 
-    def stop_tick(self):
-        if self.TickThread and self.Tick:
-            self.Tick = False
-            self.TickThread.join()
-            
+    def stopTick(self):
+        if self.tickThread and self.tick:
+            self.tick = False
+            self.tickThread.join()            
 
 class ConvaiGRPCGetResponseProxy:
-    def __init__(self, Parent: ConvaiExtension):
+    def __init__(self, Parent: ConvaiBackend):
         self.Parent = Parent
 
         self.AudioBuffer = deque(maxlen=4096*2)
         self.InformOnDataReceived = False
-        self.LastWriteReceived = False
+        self.lastWriteReceived = False
         self.client = None
         self.NumberOfAudioBytesSent = 0
         self.call = None
@@ -326,24 +303,20 @@ class ConvaiGRPCGetResponseProxy:
         log("ConvaiGRPCGetResponseProxy constructor")
 
     def activate(self):
-        # Validate API key
-        if (len(self.Parent.api_key) == 0):
-            self.Parent.on_failure("API key is empty")
+        if (len(self.Parent.apiKey) == 0):
+            self.Parent.onFail("API key is empty")
             return
-        
-        # Validate Character ID
-        if (len(self.Parent.character_id) == 0):
-            self.Parent.on_failure("Character ID is empty")
+  
+        if (len(self.Parent.charId) == 0):
+            self.Parent.onFail("Character ID is empty")
             return
-        
-        # Validate Channel
+  
         if self.Parent.channel is None:
             log("grpc - self.Parent.channel is None", 1)
-            self.Parent.on_failure("gRPC channel was not created")
+            self.Parent.onFail("gRPC channel was not created")
             return
 
-        # Create the stub
-        self.client = convai_service.ConvaiServiceStub(self.Parent.channel)
+        self.client = convaiService.ConvaiServiceStub(self.Parent.channel)
 
         threading.Thread(target=self.init_stream).start()
 
@@ -354,8 +327,8 @@ class ConvaiGRPCGetResponseProxy:
                 if response.HasField("audio_response"):
                     log("gRPC - audio_response: {} {} {}".format(response.audio_response.audio_config, response.audio_response.text_data, response.audio_response.end_of_response))
                     log("gRPC - session_id: {}".format(response.session_id))
-                    self.Parent.on_session_ID_received(response.session_id)
-                    self.Parent.on_data_received(
+                    self.Parent.onSessionIdReceived(response.session_id)
+                    self.Parent.onDataReceived(
                         response.audio_response.text_data,
                         response.audio_response.audio_data,
                         response.audio_response.audio_config.sample_rate_hertz,
@@ -363,25 +336,25 @@ class ConvaiGRPCGetResponseProxy:
 
                 elif response.HasField("action_response"):
                     log(f"gRPC - action_response: {response.action_response.action}")
-                    self.Parent.on_actions_received(response.action_response.action)
+                    self.Parent.onActionsReceived(response.action_response.action)
 
                 else:
                     log("Stream Message: {}".format(response))
             time.sleep(0.1)
                 
         except Exception as e:
-            self.Parent.on_failure(str(e))
+            self.Parent.onFail(str(e))
             return
-        self.Parent.on_finish()
+        self.Parent.onFin()
 
-    def create_initial_GetResponseRequest(self)-> convai_service_msg.GetResponseRequest:
-        action_config = convai_service_msg.ActionConfig(
+    def create_initial_GetResponseRequest(self)-> convaiServiceMsg.GetResponseRequest:
+        action_config = convaiServiceMsg.ActionConfig(
             classification = 'singlestep',
             context_level = 1
         )
-        action_config.actions[:] = self.Parent.parse_actions()
+        action_config.actions[:] = self.Parent.parseActions()
         action_config.objects.append(
-            convai_service_msg.ActionConfig.Object(
+            convaiServiceMsg.ActionConfig.Object(
                 name = "dummy",
                 description = "A dummy object."
             )
@@ -389,24 +362,24 @@ class ConvaiGRPCGetResponseProxy:
 
         log(f"gRPC - actions parsed: {action_config.actions}")
         action_config.characters.append(
-            convai_service_msg.ActionConfig.Character(
+            convaiServiceMsg.ActionConfig.Character(
                 name = "User",
                 bio = "Person playing the game and asking questions."
             )
         )
-        get_response_config = convai_service_msg.GetResponseRequest.GetResponseConfig(
-                character_id = self.Parent.character_id,
-                api_key = self.Parent.api_key,
-                audio_config = convai_service_msg.AudioConfig(
+        get_response_config = convaiServiceMsg.GetResponseRequest.GetResponseConfig(
+                character_id = self.Parent.charId,
+                api_key = self.Parent.apiKey,
+                audio_config = convaiServiceMsg.AudioConfig(
                     sample_rate_hertz = RATE
                 ),
                 action_config = action_config
             )
-        if self.Parent.SessionID and self.Parent.SessionID != "":
-            get_response_config.session_id = self.Parent.SessionID
-        return convai_service_msg.GetResponseRequest(get_response_config = get_response_config)
+        if self.Parent.sessionId and self.Parent.sessionId != "":
+            get_response_config.session_id = self.Parent.sessionId
+        return convaiServiceMsg.GetResponseRequest(get_response_config = get_response_config)
 
-    def create_getGetResponseRequests(self)-> Generator[convai_service_msg.GetResponseRequest, None, None]:
+    def create_getGetResponseRequests(self)-> Generator[convaiServiceMsg.GetResponseRequest, None, None]:
         req = self.create_initial_GetResponseRequest()
         yield req
 
@@ -422,9 +395,9 @@ class ConvaiGRPCGetResponseProxy:
                     time.sleep(0.05)
                     continue
                 self.NumberOfAudioBytesSent += len(data)
-                GetResponseData = convai_service_msg.GetResponseRequest.GetResponseData(audio_data = data)
+                GetResponseData = convaiServiceMsg.GetResponseRequest.GetResponseData(audio_data = data)
 
-            req = convai_service_msg.GetResponseRequest(get_response_data = GetResponseData)
+            req = convaiServiceMsg.GetResponseRequest(get_response_data = GetResponseData)
             yield req
 
             if IsThisTheFinalWrite:
@@ -432,14 +405,14 @@ class ConvaiGRPCGetResponseProxy:
                 break
             time.sleep(0.1)
 
-    def write_audio_data_to_send(self, Data: bytes, LastWrite: bool):
+    def writeAudDataToSend(self, Data: bytes, lastWrite: bool):
         self.AudioBuffer.append(Data)
-        if LastWrite:
-            self.LastWriteReceived = True
-            log(f"gRPC LastWriteReceived")
+        if lastWrite:
+            self.lastWriteReceived = True
+            log(f"gRPC lastWriteReceived")
 
     def finish_writing(self):
-        self.write_audio_data_to_send(bytes(), True)
+        self.writeAudDataToSend(bytes(), True)
 
     def consume_from_audio_buffer(self):
         Length = len(self.AudioBuffer)
@@ -449,7 +422,7 @@ class ConvaiGRPCGetResponseProxy:
         if Length:
             data = self.AudioBuffer.pop()
         
-        if self.LastWriteReceived and Length == 0:
+        if self.lastWriteReceived and Length == 0:
             IsThisTheFinalWrite = True
         else:
             IsThisTheFinalWrite = False

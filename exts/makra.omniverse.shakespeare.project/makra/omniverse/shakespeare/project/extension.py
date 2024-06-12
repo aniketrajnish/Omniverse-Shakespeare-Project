@@ -3,7 +3,7 @@ import omni.ext
 import omni.ui as ui
 from omni.kit.window.file_importer import get_file_importer
 from .gemini import gemini
-from .convai import convai, ConvaiExtension
+from .convai import convai, ConvaiBackend
 
 class ShakespeareProjectExtension(omni.ext.IExt):
     def __init__(self):
@@ -29,21 +29,21 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                     self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)
                     ui.Spacer()   
 
-        self.convaiExt = ConvaiExtension.get_instance(self.convaiBtn, self._window)
+        self.convaiExt = ConvaiBackend.get_instance(self.convaiBtn, self._window)
 
-        if self.convaiExt.on_new_update_sub is None:
-            self.convaiExt.on_new_update_sub = (
+        if self.convaiExt.onNewUpdateSub is None:
+            self.convaiExt.onNewUpdateSub = (
                 omni.kit.app.get_app()
                 .get_update_event_stream()
-                .create_subscription_to_pop(self.convaiExt._on_UI_update_event, name="convai new UI update")
+                .create_subscription_to_pop(self.convaiExt.onUIUpdateEvent, name="UI update")
             )                  
 
     def onconvaiBtnClick(self):
-        if self.convaiExt and hasattr(self.convaiExt, 'IsCapturingAudio'):
-            if self.convaiExt.IsCapturingAudio:
-                self.convaiExt.stop_convai()
+        if self.convaiExt and hasattr(self.convaiExt, 'isCapturingAudio'):
+            if self.convaiExt.isCapturingAudio:
+                self.convaiExt.stopConvai()
             else:
-                self.convaiExt.start_convai()
+                self.convaiExt.startConvai()
         else: 
             print("[ShakespeareProject] Convai extension not initialized properly.")
 

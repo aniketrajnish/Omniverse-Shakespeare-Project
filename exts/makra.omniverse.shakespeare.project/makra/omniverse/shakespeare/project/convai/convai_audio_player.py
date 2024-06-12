@@ -14,7 +14,7 @@ class ConvaiAudioPlayer:
         self.pa_stream = None
         self.IsPlaying = False
     
-    def append_to_stream(self, data: bytes):
+    def appendToStream(self, data: bytes):
         segment = AudioSegment.from_wav(io.BytesIO(data)).fade_in(100).fade_out(100)
         if self.AudioSegment is None:
             self.AudioSegment = segment
@@ -164,7 +164,7 @@ if __name__ == '__main__':
                 ),
                 action_config = action_config
             )
-        # session_id = "f50b7bf00ad50f5c2c22065965948c16"
+        
         if session_id != "":
             get_response_config.session_id = session_id
         yield convai_service_msg.GetResponseRequest(
@@ -198,30 +198,4 @@ if __name__ == '__main__':
             print("Stream Message: {}".format(response))
     p.terminate()
 
-    # start_mic()
     time.sleep(10)
-
-
-
-
-    # while 1:
-
-
-    #     audio_player = ConvaiAudioPlayer(None)
-    #     # data = stream.read(CHUNK)
-    #     # _, data = scipy.io.wavfile.read("F:/Work/Convai/Tests/Welcome.wav")
-    #     f = open("F:/Work/Convai/Tests/Welcome.wav", "rb")
-    #     data = f.read()
-    #     print(type(data))
-    #     audio_player.append_to_stream(data)
-    #     time.sleep(0.2)
-    #     break
-
-    # # stop_mic()
-    # time.sleep(2)
-
-    # with keyboard.Listener(on_press=on_press,on_release=on_release):
-    #     while(1):
-    #         time.sleep(0.1)
-    #         continue
-    #         print("running")
