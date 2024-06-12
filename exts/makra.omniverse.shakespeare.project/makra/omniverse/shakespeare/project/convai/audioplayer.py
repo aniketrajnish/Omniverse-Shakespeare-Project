@@ -69,13 +69,13 @@ class ConvaiAudioPlayer:
             return bytes()
 
             
-        FramesToReturn = self.audSegment._data[0:frameEnd]
+        framesToReturn = self.audSegment._data[0:frameEnd]
         if frameEnd == len(self.audSegment._data):
             self.audSegment._data = bytes()
         else:
             self.audSegment._data = self.audSegment._data[frameEnd:]
 
-        return FramesToReturn
+        return framesToReturn
 
 if __name__ == '__main__':
     import time
@@ -188,7 +188,7 @@ if __name__ == '__main__':
     for response in client.GetResponse(getGetResponseRequests(apiKey, charId)):
         if response.HasField("audio_response"):
             print("Stream Message: {} {} {}".format(response.session_id, response.audio_response.audio_config, response.audio_response.text_data))
-            convaiAudPlayer.append_to_stream(response.audio_response.audio_data)
+            convaiAudPlayer.appendToStream(response.audio_response.audio_data)
 
         else:
             print("Stream Message: {}".format(response))
