@@ -1,17 +1,8 @@
-"""Client and server classes corresponding to protobuf-defined services."""
 import grpc
-
 from . import service_pb2 as service__pb2
 
 class ConvaiServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
-
     def __init__(self, channel):
-        """Constructor.
-
-        Args:
-            channel: A grpc.Channel.
-        """
         self.Hello = channel.unary_unary(
                 '/service.ConvaiService/Hello',
                 request_serializer=service__pb2.HelloRequest.SerializeToString,
@@ -39,34 +30,27 @@ class ConvaiServiceStub(object):
                 )
 
 class ConvaiServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
-
     def Hello(self, request, context):
-        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def HelloStream(self, request_iterator, context):
-        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def SpeechToText(self, request_iterator, context):
-        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetResponse(self, request_iterator, context):
-        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetResponseSingle(self, request, context):
-        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -105,8 +89,6 @@ def add_ConvaiServiceServicer_to_server(servicer, server):
 
 
 class ConvaiService(object):
-    """Missing associated documentation comment in .proto file."""
-
     @staticmethod
     def Hello(request,
             target,

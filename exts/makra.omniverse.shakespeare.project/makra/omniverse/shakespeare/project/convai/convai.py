@@ -200,9 +200,6 @@ class ConvaiBackend:
         self.convaiGRPCGetResponseProxy = None
 
     def onDataReceived(self, receivedText: str, receivedAudio: bytes, SampleRate: int, isFinal: bool):
-        '''
-	    Called when new text and/or Audio data is received
-        '''
         self.ResponseTextBuffer += str(receivedText)
         if isFinal:
             with self.uiLock:
@@ -224,9 +221,6 @@ class ConvaiBackend:
             self.convaiBtn.enabled = self.convaiBtnState
 
     def onActionsReceived(self, action: str):
-        '''
-	    Called when actions are received
-        '''
         self.uiLock.acquire()
         for InputAction in self.parseActions():
             if action.find(InputAction) >= 0:
@@ -236,16 +230,9 @@ class ConvaiBackend:
         self.uiLock.release()
         
     def onSessionIdReceived(self, sessionId: str):
-        '''
-	    Called when new SessionID is received
-        '''
         self.sessionId = sessionId
 
     def onFin(self, resetUI = True):
-        '''
-	    Called when the response stream is done
-        '''
-
         self.convaiGRPCGetResponseProxy = None
         with self.uiLock:
             if resetUI:
@@ -256,9 +243,6 @@ class ConvaiBackend:
         log("Received onFin")
 
     def onFail(self, ErrorMessage: str):
-        '''
-        Called when there is an unsuccessful response
-        '''
         log(f"onFail called with message: {ErrorMessage}", 1)
         self.stopMic()
 
@@ -300,7 +284,6 @@ class ConvaiBackend:
 
     def fireEvent(self, eventName):
         def resgisteredEventName(eventName):
-            """Returns the internal name used for the given custom event name"""
             n = "omni.graph.action." + eventName
             return carb.events.type_from_string(n)
 
@@ -425,7 +408,7 @@ class ConvaiGRPCGetResponseProxy:
             isThisTheFinalWrite = False
             GetResponseData = None
 
-            if (0): # check if this is a text request
+            if (0): 
                 pass
             else:
                 data, isThisTheFinalWrite = self.consumeFromAudioBuffer()

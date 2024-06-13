@@ -34,15 +34,9 @@ class ConvaiAudioPlayer:
         self.isPlaying = True
 
     def pause(self):
-        '''
-        Pause playing
-        '''
         self.isPlaying = False
     
     def stop(self):
-        '''
-        Pause playing and clear audio
-        '''
         self.pause()
         self.audSegment = None
 
