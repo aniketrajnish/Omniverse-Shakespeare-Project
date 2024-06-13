@@ -29,7 +29,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                     self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)
                     ui.Spacer()   
 
-        self.convaiExt = convai.ConvaiBackend.get_instance(self.convaiBtn, self._window)
+        self.convaiExt = convai.ConvaiBackend.getInstance(self.convaiBtn, self._window)
 
         if self.convaiExt.onNewUpdateSub is None:
             self.convaiExt.onNewUpdateSub = (

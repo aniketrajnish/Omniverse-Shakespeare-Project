@@ -123,48 +123,48 @@ if __name__ == '__main__':
         print("stopMic - Stopped Recording")
 
     def getGetResponseRequests(apiKey: str, charId: str, sessionId: str = "") -> Generator[convaiServiceMsg.GetResponseRequest, None, None]:
-        action_config = convaiServiceMsg.ActionConfig(
+        actionConfig = convaiServiceMsg.ActionConfig(
             classification = 'multistep',
             context_level = 1
         )
-        action_config.actions[:] = ["fetch", "jump", "dance", "swim"]
-        action_config.objects.append(
+        actionConfig.actions[:] = ["fetch", "jump", "dance", "swim"]
+        actionConfig.objects.append(
             convaiServiceMsg.ActionConfig.Object(
                 name = "ball",
                 description = "A round object that can bounce around."
             )
         )
-        action_config.objects.append(
+        actionConfig.objects.append(
             convaiServiceMsg.ActionConfig.Object(
                 name = "water",
                 description = "Liquid found in oceans, seas and rivers that you can swim in. You can also drink it."
             )
         )
-        action_config.characters.append(
+        actionConfig.characters.append(
             convaiServiceMsg.ActionConfig.Character(
                 name = "User",
                 bio = "Person playing the game and asking questions."
             )
         )
-        action_config.characters.append(
+        actionConfig.characters.append(
             convaiServiceMsg.ActionConfig.Character(
                 name = "Learno",
                 bio = "A medieval farmer from a small village."
             )
         )
-        get_response_config = convaiServiceMsg.GetResponseRequest.GetResponseConfig(
+        getResponseConfig = convaiServiceMsg.GetResponseRequest.GetResponseConfig(
                 character_id = charId,
                 api_key = apiKey,
                 audio_config = convaiServiceMsg.AudioConfig(
                     sample_rate_hertz = 16000
                 ),
-                action_config = action_config
+                action_config = actionConfig
             )
         
         if sessionId != "":
-            get_response_config.session_id = sessionId
+            getResponseConfig.session_id = sessionId
         yield convaiServiceMsg.GetResponseRequest(
-            get_response_config = get_response_config    
+            getResponseConfig = getResponseConfig    
         )
         for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
             data = stream.read(CHUNK)

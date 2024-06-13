@@ -66,6 +66,12 @@ def appendToCharBackstory(backstoryUpdate):
 class ConvaiBackend:
     _instance = None
 
+    @staticmethod
+    def getInstance(convaiBtn, _window):
+        if ConvaiBackend._instance is None:
+            ConvaiBackend(convaiBtn, _window)
+        return ConvaiBackend._instance
+
     def __init__(self, convaiBtn, _window):
         if ConvaiBackend._instance is not None:
             raise Exception("This class is a singleton!")
@@ -79,13 +85,7 @@ class ConvaiBackend:
         self.readConfig()
         self.createChannel()
 
-        log("ConvaiBackend initialized")
-
-    @staticmethod
-    def get_instance(convaiBtn, _window):
-        if ConvaiBackend._instance is None:
-            ConvaiBackend(convaiBtn, _window)
-        return ConvaiBackend._instance
+        log("ConvaiBackend initialized")    
 
     def initVars(self):
         self.isCapturingAudio = False
@@ -163,13 +163,6 @@ class ConvaiBackend:
         self.readMicAndSendToGrpc(True)
 
         self.stopMic()
-
-    def on_shutdown(self):
-        self.cleanGrpcStream()
-        self.closeChannel()
-        self.stopTick()
-
-        log("ConvaiBackend shutdown")
 
     def startMic(self):
         if self.isCapturingAudio == True:
@@ -393,20 +386,20 @@ class ConvaiGRPCGetResponseProxy:
         self.parent.onFin()
 
     def createInitGetResponseRequest(self)-> convaiServiceMsg.GetResponseRequest:
-        action_config = convaiServiceMsg.ActionConfig(
+        actionConfig = convaiServiceMsg.ActionConfig(
             classification = 'singlestep',
             context_level = 1
         )
-        action_config.actions[:] = self.parent.parseActions()
-        action_config.objects.append(
+        actionConfig.actions[:] = self.parent.parseActions()
+        actionConfig.objects.append(
             convaiServiceMsg.ActionConfig.Object(
                 name = "dummy",
                 description = "A dummy object."
             )
         )
 
-        log(f"gRPC - actions parsed: {action_config.actions}")
-        action_config.characters.append(
+        log(f"gRPC - actions parsed: {actionConfig.actions}")
+        actionConfig.characters.append(
             convaiServiceMsg.ActionConfig.Character(
                 name = "User",
                 bio = "Person playing the game and asking questions."
@@ -418,7 +411,7 @@ class ConvaiGRPCGetResponseProxy:
                 audio_config = convaiServiceMsg.AudioConfig(
                     sample_rate_hertz = RATE
                 ),
-                action_config = action_config
+                action_config = actionConfig
             )
         if self.parent.sessionId and self.parent.sessionId != "":
             getResponseConfig.session_id = self.parent.sessionId
@@ -455,9 +448,6 @@ class ConvaiGRPCGetResponseProxy:
         if lastWrite:
             self.lastWriteReceived = True
             log(f"gRPC lastWriteReceived")
-
-    def finish_writing(self):
-        self.writeAudDataToSend(bytes(), True)
 
     def consumeFromAudioBuffer(self):
         length = len(self.audBuffer)
