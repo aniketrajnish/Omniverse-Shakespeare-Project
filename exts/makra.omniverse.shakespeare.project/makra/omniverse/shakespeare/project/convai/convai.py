@@ -124,7 +124,7 @@ class ConvaiBackend:
         if (self.channel):
             log("gRPC channel already created")
             return
-        
+                
         self.channel = grpc.secure_channel(self.channelAddress, grpc.ssl_channel_credentials())
         log("Created gRPC channel")
 
@@ -158,7 +158,7 @@ class ConvaiBackend:
         asyncio.ensure_future(self.processAudDelay())
 
     async def processAudDelay(self):
-        await asyncio.sleep(2)
+        await asyncio.sleep(.2)
 
         self.readMicAndSendToGrpc(True)
 
