@@ -13,6 +13,6 @@ _*/
 
 /FIEA
 
-/exts/makra.omniverse.shakespeare.project/makra/omniverse/shakespeare/project/gemini/gemini.env
-/exts/makra.omniverse.shakespeare.project/makra/omniverse/shakespeare/project/convai/convai.env
-/exts/makra.omniverse.shakespeare.project/makra/omniverse/shakespeare/project/gemini/config.json
+/src/gemini/gemini.env
+/src/convai/convai.env
+/src/gemini/config.json
