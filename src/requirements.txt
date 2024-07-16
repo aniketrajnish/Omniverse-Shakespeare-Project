@@ -5,7 +5,3 @@ pydub==0.25.1
 PyQt5==5.15.10
 PyQt5_sip==12.13.0
 Requests==2.32.3
-scipy
-wavio
-sounddevice
-googleapis-common-protos

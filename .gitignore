@@ -16,3 +16,6 @@ _*/
 /src/gemini/gemini.env
 /src/convai/convai.env
 /src/gemini/config.json
+/src/dist
+/src/build
+/src/main.spec
