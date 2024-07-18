@@ -9,13 +9,13 @@ _*/
 
 /.vs
 
-/app
+
 
 /FIEA
 
-/src/gemini/gemini.env
-/src/convai/convai.env
-/src/gemini/config.json
-/src/dist
-/src/build
-/src/main.spec
+/app/src/gemini/gemini.env
+/app/src/convai/convai.env
+/app/src/gemini/config.json
+/app/src/dist
+/app/src/build
+/app/src/main.spec
