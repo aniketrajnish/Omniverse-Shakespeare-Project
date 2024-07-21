@@ -19,3 +19,5 @@ _*/
 /app/src/dist
 /app/src/build
 /app/src/main.spec
+/omni/shakespeare-ai/exts/shakespeare.ai/shakespeare/ai/convai/convai.env
+/omni/shakespeare-ai/exts/shakespeare.ai/shakespeare/ai/gemini/gemini.env
