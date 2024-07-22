@@ -1,24 +1,20 @@
-import os
-import asyncio
-import configparser
-import pyaudio
-import grpc
-import requests
-import json
+import os, configparser, pyaudio, grpc, requests, json, threading, time, socket, struct, wave, io
 from typing import Generator
-import threading, time
 from collections import deque
 from PyQt5.QtCore import pyqtSignal, QObject, QMetaObject, Qt, Q_ARG
 
 from .rpc import service_pb2 as convaiServiceMsg, service_pb2_grpc as convaiService
-from .audioplayer import ConvaiAudioPlayer
+
+import numpy as np
+from scipy import signal
+from pydub import AudioSegment
 
 __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
-RATE = 12000
+RATE = 44100
 
 
 def log(text: str, warning: bool = False):
@@ -102,6 +98,13 @@ class ConvaiBackend(QObject):
         log("ConvaiBackend initialized")
 
     def initVars(self):
+        self.audQueue = deque(maxlen=4096 * 2)
+        self.audSocket = None
+        self.audSocketThread = None
+        self.a2fHst = 'localhost'
+        self.a2fPrt = 65432
+        self.audQueueCondition = threading.Condition()
+
         self.isCapturingAudio = False
         self.channelAddress = None
         self.channel = None
@@ -112,12 +115,42 @@ class ConvaiBackend(QObject):
         self.stream = None
         self.tick = False
         self.tickThread = None
-        self.convaiAudioPlayer = ConvaiAudioPlayer(self.onStartTalkCallback, self.onStopTalkCallback)
         self.ResponseTextBuffer = ""
         self.OldCharacterID = ""
 
         self.uiLock = threading.Lock()
         self.micLock = threading.Lock()
+
+    def connectToA2F(self):
+        try:
+            self.audSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.audSocket.connect((self.a2fHst, self.a2fPrt))
+            self.audSocketThread = threading.Thread(target=self.audioSocketLoop)
+            self.audSocketThread.daemon = True
+            self.audSocketThread.start()
+        except Exception as e:
+            log(f"Error connecting to A2F: {e}", 1)    
+
+    def audioSocketLoop(self):
+        while True:
+            try:
+                with self.audQueueCondition:
+                    while not self.audQueue:
+                        print("[Convai - audioSocketLoop] Waiting for audio data...")
+                        self.audQueueCondition.wait()
+
+                    while self.audQueue:
+                        wav_data, sampleRate = self.audQueue.popleft()
+                        message = struct.pack('>i', sampleRate) + b'|' + wav_data
+                        message_length = len(message)
+                        
+                        print(f"[Convai] Sending message length: {message_length}")
+                        self.audSocket.sendall(struct.pack('>i', message_length) + message)
+                        print("[Convai] Audio chunk sent")
+
+            except Exception as e:
+                log(f"Error sending audio data: {e}", 1)
+                break  # Exit the loop on error, but consider if you want to continue or reconnect 
 
     def readConfig(self):
         config = configparser.ConfigParser()
@@ -143,6 +176,7 @@ class ConvaiBackend(QObject):
             log("closeChannel - Closed gRPC channel")
         else:
             log("closeChannel - gRPC channel already closed")
+            pass
 
     def startConvai(self):
         if self.OldCharacterID != self.charId:
@@ -151,8 +185,8 @@ class ConvaiBackend(QObject):
 
         self.updateBtnText("Stop")
         self.startMic()
-        self.convaiAudioPlayer.stop()
         self.convaiGRPCGetResponseProxy = ConvaiGRPCGetResponseProxy(self)
+        self.connectToA2F()
 
     def stopConvai(self):
         self.updateBtnText("Processing...")
@@ -186,6 +220,7 @@ class ConvaiBackend(QObject):
             self.stream.stop_stream()
             self.stream.close()
         else:
+            pass
             log("stopMic - could not close mic stream since it is None", 1)
 
         self.isCapturingAudio = False
@@ -198,10 +233,24 @@ class ConvaiBackend(QObject):
         self.convaiGRPCGetResponseProxy = None
 
     def onDataReceived(self, receivedText: str, receivedAudio: bytes, SampleRate: int, isFinal: bool):
-        self.ResponseTextBuffer += str(receivedText)
-        if isFinal:
-            self.ResponseTextBuffer = ""
-        self.convaiAudioPlayer.appendToStream(receivedAudio)
+        try:
+            print(f"Received audio data: length={len(receivedAudio)}, sample_rate={SampleRate}")
+            if self.audSocket:
+                segment = AudioSegment.from_wav(io.BytesIO(receivedAudio)).fade_in(100).fade_out(100)
+                
+                wav_buffer = io.BytesIO()
+                segment.export(wav_buffer, format="wav")
+                wav_data = wav_buffer.getvalue()
+                
+                with self.audQueueCondition:
+                    self.audQueue.append((wav_data, SampleRate))
+                    print(f"Added audio chunk to queue. Queue size: {len(self.audQueue)}")
+                    self.audQueueCondition.notify()
+                
+                print(f"Processed audio: length={len(segment)}, channels={segment.channels}, sample_width={segment.sample_width}, frame_rate={segment.frame_rate}")
+        
+        except Exception as e:
+            log(f"Error in onDataReceived: {e}", 1)
 
     def onActionsReceived(self, action: str):
         self.uiLock.acquire()
@@ -217,7 +266,6 @@ class ConvaiBackend(QObject):
     def onFin(self, resetUI=True):
         self.convaiGRPCGetResponseProxy = None
         self.cleanGrpcStream()
-        log("Received onFin")
         if resetUI:
             self.updateBtnText("Start Talking")
             self.setBtnEnabled(True)
@@ -254,6 +302,7 @@ class ConvaiBackend(QObject):
             if self.convaiGRPCGetResponseProxy:
                 self.convaiGRPCGetResponseProxy.writeAudDataToSend(data, lastWrite)
             else:
+                pass
                 log("readMicAndSendToGrpc - ConvaiGRPCGetResponseProxy is not valid", 1)
 
     def parseActions(self):
@@ -289,6 +338,7 @@ class ConvaiGRPCGetResponseProxy:
         self.lastWriteReceived = False
         self.client = None
         self.noOfAudioBytesSent = 0
+        self.audQueue = deque(maxlen=4096 * 2)
 
         self.activate()
         log("ConvaiGRPCGetResponseProxy constructor")
@@ -327,12 +377,15 @@ class ConvaiGRPCGetResponseProxy:
                         response.audio_response.audio_data,
                         response.audio_response.audio_config.sample_rate_hertz,
                         response.audio_response.end_of_response)
+                    
+                    print("lawde ka sample rate: ", response.audio_response.audio_config.sample_rate_hertz)
 
                 elif response.HasField("action_response"):
                     log(f"gRPC - action_response: {response.action_response.action}")
                     self.parent.onActionsReceived(response.action_response.action)
 
                 else:
+                    pass
                     log("Stream Message: {}".format(response))
             time.sleep(0.1)
 
@@ -415,6 +468,7 @@ class ConvaiGRPCGetResponseProxy:
             isThisTheFinalWrite = False
 
         if isThisTheFinalWrite:
+            pass
             log(f"gRPC Consuming last mic write")
 
         return data, isThisTheFinalWrite
