@@ -1,9 +1,8 @@
-import grpc
-import audio2face_pb2
-import audio2face_pb2_grpc
+import grpc, io, wave, struct, socket
+import audio2face_pb2, audio2face_pb2_grpc
 import numpy as np
-import io
-import wave
+import threading
+import time
 
 class A2FClient:
     def __init__(self, url, instance_name):
@@ -12,47 +11,72 @@ class A2FClient:
         self.channel = grpc.insecure_channel(url)
         self.stub = audio2face_pb2_grpc.Audio2FaceStub(self.channel)
         self.channels = 1
-        self.sample_width = 4  # 4 bytes for float32
+        self.sample_width = 2  # 2 bytes for int16
+        self.accumulated_audio = b''
+        self.sample_rate = None
+        self.lock = threading.Lock()
+        self.stream_thread = None
+        self.is_streaming = False
+        self.chunk_duration = 2
 
-    def push_audio_track(self, audio_data, sample_rate):
-        """
-        This function pushes the whole audio track at once via PushAudioRequest()
-        """
+    def append_audio_data(self, audio_data, sample_rate):
+        with self.lock:
+            if self.sample_rate is None:
+                self.sample_rate = sample_rate
+            elif self.sample_rate != sample_rate:
+                print(f"[A2FClient] Warning: Sample rate changed from {self.sample_rate} to {sample_rate}")
+                self.sample_rate = sample_rate
+
+            self.accumulated_audio += audio_data
+
+        if not self.is_streaming:
+            self.start_streaming()
+
+    def start_streaming(self):
+        if self.is_streaming:
+            return
+        self.is_streaming = True
+        self.stream_thread = threading.Thread(target=self.stream_audio)
+        self.stream_thread.start()
+
+    def stream_audio(self):
+        def generate_audio_chunks():
+            start_marker = audio2face_pb2.PushAudioRequestStart(
+                samplerate=self.sample_rate,
+                instance_name=self.instance_name,
+                block_until_playback_is_finished=False,
+            )
+            yield audio2face_pb2.PushAudioStreamRequest(start_marker=start_marker)
+
+            while self.is_streaming:
+                with self.lock:
+                    chunk_size = int(self.sample_rate * 2 * self.chunk_duration)
+                    if len(self.accumulated_audio) >= chunk_size:
+                        audio_chunk = self.accumulated_audio[:chunk_size]
+                        self.accumulated_audio = self.accumulated_audio[chunk_size:]
+                    else:
+                        audio_chunk = None
+
+                if audio_chunk:
+                    audio_np = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
+                    yield audio2face_pb2.PushAudioStreamRequest(audio_data=audio_np.tobytes())
+                    time.sleep(self.chunk_duration - 1)
+                else:
+                    time.sleep(.01)
+
         try:
-            # Convert to float32 and normalize
-            audio_np = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
-
-            # Create WAV file in memory
-            wav_buffer = io.BytesIO()
-            with wave.open(wav_buffer, 'wb') as wav_file:
-                wav_file.setnchannels(self.channels)
-                wav_file.setsampwidth(self.sample_width)
-                wav_file.setframerate(sample_rate)
-                wav_file.writeframes(audio_np.tobytes())
-
-            # Get the WAV data
-            wav_data = wav_buffer.getvalue()
-
-            request = audio2face_pb2.PushAudioRequest()
-            request.audio_data = wav_data
-            request.samplerate = sample_rate
-            request.instance_name = self.instance_name
-            request.block_until_playback_is_finished = False  # Set to True if you want to block until playback is finished
-
-            print(f"[A2FClient] Sending audio data: length={len(wav_data)}, sample_rate={sample_rate}")
-            response = self.stub.PushAudio(request)
-            
+            response = self.stub.PushAudioStream(generate_audio_chunks())
             if response.success:
-                print("[A2FClient] Audio sent successfully")
+                print("[A2FClient] Audio stream completed successfully")
             else:
-                print(f"[A2FClient] Error sending audio: {response.message}")
-        
+                print(f"[A2FClient] Error in audio stream: {response.message}")
         except Exception as e:
-            print(f"[A2FClient] Error during audio sending: {e}")
+            print(f"[A2FClient] Error during audio streaming: {e}")
 
-# Main loop
-import socket
-import struct
+    def stop_streaming(self):
+        self.is_streaming = False
+        if self.stream_thread:
+            self.stream_thread.join()
 
 HOST = 'localhost'
 PORT = 65432
@@ -66,8 +90,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     conn, addr = s.accept()
     print(f"[Audio2Face Socket Server] Connected by {addr}")
     
-    while True:
-        try:
+    try:
+        while True:
             message_length_data = conn.recv(4)
             if not message_length_data:
                 print("[Audio2Face Socket Server] Client disconnected.")
@@ -93,10 +117,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
             print(f"[Audio2Face Socket Server] Received audio data: length={len(audio_data)}, sample_rate={sample_rate}")
 
-            a2f_client.push_audio_track(audio_data, sample_rate)
+            a2f_client.append_audio_data(audio_data, sample_rate)
 
-        except Exception as e:
-            print(f"[Audio2Face Socket Server] Error receiving audio data: {e}")
-            break
+    except Exception as e:
+        print(f"[Audio2Face Socket Server] Error receiving audio data: {e}")
+    finally:
+        a2f_client.stop_streaming()
 
     print("[Audio2Face Socket Server] Closing the connection.")
