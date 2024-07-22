@@ -3,6 +3,7 @@ import audio2face_pb2, audio2face_pb2_grpc
 import numpy as np
 import threading
 import time
+from pydub import AudioSegment
 
 class A2FClient:
     def __init__(self, url, instance_name):
@@ -28,7 +29,14 @@ class A2FClient:
                 print(f"[A2FClient] Warning: Sample rate changed from {self.sample_rate} to {sample_rate}")
                 self.sample_rate = sample_rate
 
-            self.accumulated_audio += audio_data            
+            audio_segment = AudioSegment(
+                data=audio_data,
+                sample_width=self.sample_width,
+                frame_rate=sample_rate,
+                channels=self.channels
+            )
+            audio_segment = audio_segment.fade_in(25).fade_out(25)
+            self.accumulated_audio += audio_segment.raw_data            
 
         if not self.is_streaming:
             self.start_streaming()
