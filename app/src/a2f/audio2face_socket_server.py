@@ -12,12 +12,13 @@ class A2FClient:
         self.stub = audio2face_pb2_grpc.Audio2FaceStub(self.channel)
         self.channels = 1
         self.sample_width = 2  # 2 bytes for int16
-        self.accumulated_audio = b''
+        self.accumulated_audio = bytearray()
         self.sample_rate = None
         self.lock = threading.Lock()
         self.stream_thread = None
         self.is_streaming = False
-        self.chunk_duration = 2
+        self.chunk_duration = 1
+        self.total_duration = 0
 
     def append_audio_data(self, audio_data, sample_rate):
         with self.lock:
@@ -27,7 +28,7 @@ class A2FClient:
                 print(f"[A2FClient] Warning: Sample rate changed from {self.sample_rate} to {sample_rate}")
                 self.sample_rate = sample_rate
 
-            self.accumulated_audio += audio_data
+            self.accumulated_audio += audio_data            
 
         if not self.is_streaming:
             self.start_streaming()
@@ -46,7 +47,7 @@ class A2FClient:
                 instance_name=self.instance_name,
                 block_until_playback_is_finished=False,
             )
-            yield audio2face_pb2.PushAudioStreamRequest(start_marker=start_marker)
+            yield audio2face_pb2.PushAudioStreamRequest(start_marker=start_marker)           
 
             while self.is_streaming:
                 with self.lock:
@@ -60,7 +61,7 @@ class A2FClient:
                 if audio_chunk:
                     audio_np = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
                     yield audio2face_pb2.PushAudioStreamRequest(audio_data=audio_np.tobytes())
-                    time.sleep(self.chunk_duration - 1)
+                    time.sleep(.5)
                 else:
                     time.sleep(.01)
 
@@ -80,6 +81,7 @@ class A2FClient:
 
 HOST = 'localhost'
 PORT = 65432
+BUFFER_SIZE = 4194304  # 4MB
 
 a2f_client = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
 
@@ -100,16 +102,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
             print(f"[Audio2Face Socket Server] Receiving message of length: {message_length}")
 
-            data = b''
-            while len(data) < message_length:
-                packet = conn.recv(message_length - len(data))
-                if not packet:
-                    print("[Audio2Face Socket Server] Incomplete message received.")
+            data = bytearray()
+            bytes_received = 0
+            while bytes_received < message_length:
+                chunk = conn.recv(min(BUFFER_SIZE, message_length - bytes_received))
+                if not chunk:
+                    print("[Audio2Face Socket Server] Connection closed before receiving complete message.")
                     break
-                data += packet
+                data.extend(chunk)
+                bytes_received += len(chunk)
 
-            if len(data) != message_length:
-                print(f"[Audio2Face Socket Server] Received incomplete message! Expected {message_length} bytes, got {len(data)}.")
+            if bytes_received != message_length:
+                print(f"[Audio2Face Socket Server] Received incomplete message! Expected {message_length} bytes, got {bytes_received}.")
                 continue
 
             sample_rate_bytes, audio_data = data.split(b'|', 1)

@@ -98,7 +98,7 @@ class ConvaiBackend(QObject):
         log("ConvaiBackend initialized")
 
     def initVars(self):
-        self.audQueue = deque(maxlen=4096 * 2)
+        self.audQueue = deque(maxlen=4096 * 8)
         self.audSocket = None
         self.audSocketThread = None
         self.a2fHst = 'localhost'
@@ -159,7 +159,6 @@ class ConvaiBackend(QObject):
         self.apiKey = config.get("CONVAI", "API_KEY")
         self.charId = config.get("CONVAI", "CHARACTER_ID")
         self.channelAddress = config.get("CONVAI", "CHANNEL")
-        self.actionsTxt = config.get("CONVAI", "ACTIONS")
 
     def createChannel(self):
         if self.channel:
@@ -236,7 +235,7 @@ class ConvaiBackend(QObject):
         try:
             print(f"Received audio data: length={len(receivedAudio)}, sample_rate={SampleRate}")
             if self.audSocket:
-                segment = AudioSegment.from_wav(io.BytesIO(receivedAudio)).fade_in(100).fade_out(100)
+                segment = AudioSegment.from_wav(io.BytesIO(receivedAudio)).fade_in(10).fade_out(10)
                 
                 wav_buffer = io.BytesIO()
                 segment.export(wav_buffer, format="wav")
@@ -250,15 +249,7 @@ class ConvaiBackend(QObject):
                 print(f"Processed audio: length={len(segment)}, channels={segment.channels}, sample_width={segment.sample_width}, frame_rate={segment.frame_rate}")
         
         except Exception as e:
-            log(f"Error in onDataReceived: {e}", 1)
-
-    def onActionsReceived(self, action: str):
-        self.uiLock.acquire()
-        for InputAction in self.parseActions():
-            if action.find(InputAction) >= 0:
-                self.uiLock.release()
-                return
-        self.uiLock.release()
+            log(f"Error in onDataReceived: {e}", 1)    
 
     def onSessionIdReceived(self, sessionId: str):
         self.sessionId = sessionId
@@ -303,12 +294,7 @@ class ConvaiBackend(QObject):
                 self.convaiGRPCGetResponseProxy.writeAudDataToSend(data, lastWrite)
             else:
                 pass
-                log("readMicAndSendToGrpc - ConvaiGRPCGetResponseProxy is not valid", 1)
-
-    def parseActions(self):
-        actions = ["None"] + self.actionsTxt.split(',')
-        actions = [a.lstrip(" ").rstrip(" ") for a in actions]
-        return actions
+                log("readMicAndSendToGrpc - ConvaiGRPCGetResponseProxy is not valid", 1)    
 
     def startTick(self):
         if self.tick:
@@ -334,11 +320,11 @@ class ConvaiGRPCGetResponseProxy:
     def __init__(self, parent: ConvaiBackend):
         self.parent = parent
 
-        self.audBuffer = deque(maxlen=4096 * 2)
+        self.audBuffer = deque(maxlen=4096 * 8)
         self.lastWriteReceived = False
         self.client = None
         self.noOfAudioBytesSent = 0
-        self.audQueue = deque(maxlen=4096 * 2)
+        self.audQueue = deque(maxlen=4096 * 8)
 
         self.activate()
         log("ConvaiGRPCGetResponseProxy constructor")
@@ -361,7 +347,7 @@ class ConvaiGRPCGetResponseProxy:
 
         threading.Thread(target=self.initStream).start()
 
-    def initStream(self):
+    def initStream(self):        
         log("grpc - stream initialized")
         try:
             for response in self.client.GetResponse(self.createGetResponseRequests()):
@@ -378,15 +364,9 @@ class ConvaiGRPCGetResponseProxy:
                         response.audio_response.audio_config.sample_rate_hertz,
                         response.audio_response.end_of_response)
                     
-                    print("lawde ka sample rate: ", response.audio_response.audio_config.sample_rate_hertz)
-
-                elif response.HasField("action_response"):
-                    log(f"gRPC - action_response: {response.action_response.action}")
-                    self.parent.onActionsReceived(response.action_response.action)
-
+                    print("Received sample rate: ", response.audio_response.audio_config.sample_rate_hertz)
                 else:
-                    pass
-                    log("Stream Message: {}".format(response))
+                    log("Unexpected response type: {}".format(response))
             time.sleep(0.1)
 
         except Exception as e:
@@ -394,36 +374,22 @@ class ConvaiGRPCGetResponseProxy:
             return
         self.parent.onFin()
 
-    def createInitGetResponseRequest(self) -> convaiServiceMsg.GetResponseRequest:
-        actionConfig = convaiServiceMsg.ActionConfig(
-            classification='singlestep',
-            context_level=1
-        )
-        actionConfig.actions[:] = self.parent.parseActions()
-        actionConfig.objects.append(
-            convaiServiceMsg.ActionConfig.Object(
-                name="dummy",
-                description="A dummy object."
-            )
-        )
 
-        log(f"gRPC - actions parsed: {actionConfig.actions}")
-        actionConfig.characters.append(
-            convaiServiceMsg.ActionConfig.Character(
-                name="User",
-                bio="Person playing the game and asking questions."
-            )
-        )
+    def createInitGetResponseRequest(self) -> convaiServiceMsg.GetResponseRequest:
         getResponseConfig = convaiServiceMsg.GetResponseRequest.GetResponseConfig(
             character_id=self.parent.charId,
             api_key=self.parent.apiKey,
             audio_config=convaiServiceMsg.AudioConfig(
                 sample_rate_hertz=RATE
             ),
-            action_config=actionConfig
+            # You can add any other necessary configuration here
+            # For example, if you need to set a language:
+            # language="en-US",
         )
+        
         if self.parent.sessionId and self.parent.sessionId != "":
             getResponseConfig.session_id = self.parent.sessionId
+        
         return convaiServiceMsg.GetResponseRequest(get_response_config=getResponseConfig)
 
     def createGetResponseRequests(self) -> Generator[convaiServiceMsg.GetResponseRequest, None, None]:
