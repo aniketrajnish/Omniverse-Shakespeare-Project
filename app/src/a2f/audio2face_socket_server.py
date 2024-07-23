@@ -18,7 +18,7 @@ class A2FClient:
         self.lock = threading.Lock()
         self.stream_thread = None
         self.is_streaming = False
-        self.chunk_duration = 1
+        self.chunk_duration = .3
         self.total_duration = 0
 
     def append_audio_data(self, audio_data, sample_rate):
@@ -69,7 +69,7 @@ class A2FClient:
                 if audio_chunk:
                     audio_np = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
                     yield audio2face_pb2.PushAudioStreamRequest(audio_data=audio_np.tobytes())
-                    time.sleep(.5)
+                    time.sleep(.2)
                 else:
                     time.sleep(.01)
 
