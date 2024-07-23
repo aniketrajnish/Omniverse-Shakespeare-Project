@@ -104,7 +104,6 @@ class ConvaiBackend(QObject):
         self.a2fHst = 'localhost'
         self.a2fPrt = 65432
         self.audQueueCondition = threading.Condition()
-        self.isStreamingAudio = False
 
         self.isCapturingAudio = False
         self.channelAddress = None
@@ -133,22 +132,25 @@ class ConvaiBackend(QObject):
             log(f"Error connecting to A2F: {e}", 1)    
 
     def audioSocketLoop(self):
-        while True:  # The loop runs indefinitely
+        while True:
             try:
                 with self.audQueueCondition:
-                    self.audQueueCondition.wait()  # Always wait for audio data
-                    if not self.isStreamingAudio:
-                        continue  # If not streaming, skip sending data
+                    while not self.audQueue:
+                        print("[Convai - audioSocketLoop] Waiting for audio data...")
+                        self.audQueueCondition.wait()
 
-                    while self.audQueue and self.isStreamingAudio:
+                    while self.audQueue:
                         wav_data, sampleRate = self.audQueue.popleft()
                         message = struct.pack('>i', sampleRate) + b'|' + wav_data
                         message_length = len(message)
                         
+                        print(f"[Convai] Sending message length: {message_length}")
                         self.audSocket.sendall(struct.pack('>i', message_length) + message)
+                        print("[Convai] Audio chunk sent")
+
             except Exception as e:
-                log(f"Error in audioSocketLoop: {e}", True)
-                break  # Consider how to handle socket errors; maybe reconnect or exit
+                log(f"Error sending audio data: {e}", 1)
+                break  # Exit the loop on error, but consider if you want to continue or reconnect 
 
     def readConfig(self):
         config = configparser.ConfigParser()
@@ -175,28 +177,16 @@ class ConvaiBackend(QObject):
             log("closeChannel - gRPC channel already closed")
             pass
 
-    def startStreaming(self):
-        if not self.isStreamingAudio:
-            self.isStreamingAudio = True
-            self.connectToA2F()  # Ensure the socket is ready and listening
-            log("Streaming to A2F started.")
-
-    def stopStreaming(self):
-        self.isStreamingAudio = False  # Signal the streaming processes to stop
-        log("Streaming to A2F stopped.")
-
     def startConvai(self):
         if self.OldCharacterID != self.charId:
             self.OldCharacterID = self.charId
             self.sessionId = ""
 
-        if self.isCapturingAudio:
-            self.disconnectA2F()
-
         self.updateBtnText("Stop")
         self.startMic()
         self.convaiGRPCGetResponseProxy = ConvaiGRPCGetResponseProxy(self)
-        self.connectToA2F()
+        if not self.audSocket:
+            self.connectToA2F()
 
     def stopConvai(self):
         self.updateBtnText("Processing...")
@@ -204,15 +194,6 @@ class ConvaiBackend(QObject):
 
         self.readMicAndSendToGrpc(True)  
         self.stopMic() 
-
-    def disconnectA2F(self):
-        if self.audSocket:
-            try:
-                self.audSocket.close()
-            except Exception as e:
-                log(f"Failed to close audio socket: {e}", True)
-            self.audSocket = None
-        self.audSocketThread = None
 
     def startMic(self):
         if self.isCapturingAudio:
