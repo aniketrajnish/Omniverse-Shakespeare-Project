@@ -36,7 +36,7 @@ class A2FClient:
                 channels=self.channels
             )
             audio_segment = audio_segment.fade_in(25).fade_out(25)
-            self.accumulated_audio += audio_segment.raw_data            
+            self.accumulated_audio += audio_segment.raw_data
 
         if not self.is_streaming:
             self.start_streaming()
@@ -55,7 +55,7 @@ class A2FClient:
                 instance_name=self.instance_name,
                 block_until_playback_is_finished=False,
             )
-            yield audio2face_pb2.PushAudioStreamRequest(start_marker=start_marker)           
+            yield audio2face_pb2.PushAudioStreamRequest(start_marker=start_marker)
 
             while self.is_streaming:
                 with self.lock:
@@ -91,15 +91,7 @@ HOST = 'localhost'
 PORT = 65432
 BUFFER_SIZE = 4194304  # 4MB
 
-a2f_client = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.bind((HOST, PORT))
-    s.listen()
-    print(f"[Audio2Face Socket Server] Waiting for a connection on {HOST}:{PORT}")
-    conn, addr = s.accept()
-    print(f"[Audio2Face Socket Server] Connected by {addr}")
-    
+def handle_connection(conn, a2f_client):
     try:
         while True:
             message_length_data = conn.recv(4)
@@ -131,9 +123,16 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
             a2f_client.append_audio_data(audio_data, sample_rate)
 
-    except Exception as e:
-        print(f"[Audio2Face Socket Server] Error receiving audio data: {e}")
     finally:
-        a2f_client.stop_streaming()
+        print("[Audio2Face Socket Server] Connection handler terminating.")
 
-    print("[Audio2Face Socket Server] Closing the connection.")
+a2f_client = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind((HOST, PORT))
+    s.listen()
+    print(f"[Audio2Face Socket Server] Waiting for a connection on {HOST}:{PORT}")
+    while True:
+        conn, addr = s.accept()
+        print(f"[Audio2Face Socket Server] Connected by {addr}")
+        threading.Thread(target=handle_connection, args=(conn, a2f_client)).start()
