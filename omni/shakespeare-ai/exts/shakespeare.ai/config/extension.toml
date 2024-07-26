@@ -16,10 +16,10 @@ readme  = "docs/README.md"
 repository = ""
 
 # One of categories for UI.
-category = "Example"
+category = "Services"
 
 # Keywords for the extension
-keywords = ["kit", "example"]
+keywords = ["audio2face", "shakespeare", "ai", "gemini", "convai"]
 
 # Location of change log file in target (final) folder of extension, relative to the root.
 # More info on writing changelog: https://keepachangelog.com/en/1.0.0/

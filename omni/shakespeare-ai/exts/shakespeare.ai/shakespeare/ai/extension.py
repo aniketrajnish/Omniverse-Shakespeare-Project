@@ -1,4 +1,4 @@
-import omni.ext, omni.usd, omni.kit.app, os, asyncio
+import omni.ext, omni.usd, omni.kit.app, os, asyncio, subprocess
 import omni.ui as ui
 from .a2f import server
 import omni.usd
@@ -22,7 +22,8 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                 self.openProjectBtn = ui.Button("Open Project", clicked_fn=self.onOpenProjectBtnClick, height=30)
                 ui.Spacer(height=0)
                 self.serverBtn = ui.Button("Connect to Server", clicked_fn=self.onServerBtnClick, height=30)
-                ui.Spacer(height=10)
+                ui.Spacer(height=0)
+                self.convoBtn = ui.Button("Open Conversation Window", clicked_fn=self.onConvoBtnClick, height=30)
 
     def onOpenProjectBtnClick(self):
         if self.isShakespeareStageOpen():
@@ -41,6 +42,16 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                 print("[Shakespeare AI] Disconnected from server")
         except Exception as e:
             print(f"[Shakespeare AI] Error with server connection: {e}")
+
+    def onConvoBtnClick(self):
+        try:
+            extPath = omni.kit.app.get_app().get_extension_manager().get_extension_path(self.extId)
+            rootPath = os.path.join(extPath, "..", "..", "..", "..")
+            exePath = os.path.normpath(os.path.join(rootPath, "app", "build", "Shakespeare AI.exe"))
+            subprocess.Popen([exePath])
+            print("[Shakespeare AI] Opened conversation window")
+        except Exception as e:
+            print(f"[Shakespeare AI] Error opening conversation window: {e}")
 
     def normalizePath(self, path):
         return path.replace("\\", "/").lower()

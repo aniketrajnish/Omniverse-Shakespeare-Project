@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
-from gemini import gemini
 from convai import convai
+from gemini import gemini
 
 class ShakespeareWindow(QtWidgets.QMainWindow):
     def __init__(self):

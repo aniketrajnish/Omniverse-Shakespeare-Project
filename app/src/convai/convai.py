@@ -1,13 +1,12 @@
-import os, configparser, pyaudio, grpc, requests, json, threading, time, socket, struct, wave, io
+import os, configparser, pyaudio, grpc, requests, json, threading, time
 from typing import Generator
 from collections import deque
-from PyQt5.QtCore import pyqtSignal, QObject, QMetaObject, Qt, Q_ARG
-
+from PyQt5.QtCore import pyqtSignal, QObject
 from .rpc import service_pb2 as convaiServiceMsg, service_pb2_grpc as convaiService
-
-import numpy as np
-from scipy import signal
 from pydub import AudioSegment
+from io import BytesIO
+from socket import socket, AF_INET, SOCK_STREAM
+from struct import pack
 
 __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
@@ -123,7 +122,7 @@ class ConvaiBackend(QObject):
 
     def connectToA2F(self):
         try:
-            self.audSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.audSocket = socket(AF_INET, SOCK_STREAM)
             self.audSocket.connect((self.a2fHst, self.a2fPrt))
             self.audSocketThread = threading.Thread(target=self.audioSocketLoop)
             self.audSocketThread.daemon = True
@@ -142,11 +141,11 @@ class ConvaiBackend(QObject):
 
                     while self.audQueue:
                         wav_data, sampleRate = self.audQueue.popleft()
-                        message = struct.pack('>i', sampleRate) + b'|' + wav_data
+                        message = pack('>i', sampleRate) + b'|' + wav_data
                         message_length = len(message)
                         
                         print(f"[Convai] Sending message length: {message_length}")
-                        self.audSocket.sendall(struct.pack('>i', message_length) + message)
+                        self.audSocket.sendall(pack('>i', message_length) + message)
                         print("[Convai] Audio chunk sent")
 
             except Exception as e:
@@ -239,9 +238,9 @@ class ConvaiBackend(QObject):
         try:
             print(f"Received audio data: length={len(receivedAudio)}, sample_rate={SampleRate}")
             if self.audSocket:
-                segment = AudioSegment.from_wav(io.BytesIO(receivedAudio)).fade_in(10).fade_out(10)
+                segment = AudioSegment.from_wav(BytesIO(receivedAudio)).fade_in(10).fade_out(10)
                 
-                wav_buffer = io.BytesIO()
+                wav_buffer = BytesIO()
                 segment.export(wav_buffer, format="wav")
                 wav_data = wav_buffer.getvalue()
                 
