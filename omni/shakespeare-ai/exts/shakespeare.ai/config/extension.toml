@@ -6,8 +6,8 @@ version = "1.0.0"
 authors = ["NVIDIA"]
 
 # The title and description fields are primarily for displaying extension info in UI
-title = "shakespeare ai"
-description="A simple python extension example to use as a starting point for your extensions."
+title = "Shakespeare AI Server" 
+description="Python extension that creates a server for the Shakespeare AI windows application to connect to Audio2Face."
 
 # Path (relative to the root) or content of readme markdown file for UI.
 readme  = "docs/README.md"
@@ -49,18 +49,9 @@ dependencies = [
 [python.pipapi]
 
 requirements = [
-    "requests",
-    "scipy",
-    "wavio",
-    "sounddevice",
-    "requests",
-    "googleapis-common-protos",
-    "grpcio==1.51.1",
-    "grpcio-tools==1.51.1",
-    "protobuf==4.21.10",
-    "PyAudio==0.2.12",
+    "numpy",
     "pydub==0.25.1"
 ]
 
-use_online_index = false
+use_online_index = true
 ignore_import_check = true

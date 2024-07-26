@@ -1,80 +1,91 @@
-import os
-import omni.ext
+import omni.ext, omni.usd, omni.kit.app, os, asyncio
 import omni.ui as ui
-from omni.kit.window.file_importer import get_file_importer
-from .gemini import gemini
-from .convai import convai
+from .a2f import server
+import omni.usd
 
 class ShakespeareProjectExtension(omni.ext.IExt):
     def __init__(self):
         super().__init__()
-        self.convaiExt = None 
+        self.stopEvent = None
+        self.serverThread = None
 
     def on_startup(self, ext_id):
-        print("[Shakespeare Project] Startup")     
+        print("[Shakespeare AI] Startup") 
+        self.extId = ext_id    
         self.initUI()
 
     def initUI(self):
-        self._window = ui.Window("Shakespeare AI", width=420, height=300)
+        self._window = ui.Window("Shakespeare AI Server", width=200, height=150)
         with self._window.frame:
-            with ui.Frame(padding=0):
-                with ui.VStack(spacing = 0):
-                    with ui.HStack():
-                        ui.Spacer()
-                        self.selectImgBtn = ui.Button("Select Image", clicked_fn=self.selectImage, width=100, height=30)
-                        ui.Spacer(width=10)
-                        self.convaiBtn = ui.Button("Start Talking", clicked_fn=self.onconvaiBtnClick, width=100, height=30)
-                        ui.Spacer()       
-                    ui.Spacer()             
-                    self.imgWidget = ui.Image(width=400, height=225, fill_policy=ui.FillPolicy.PRESERVE_ASPECT_FIT)
-                    ui.Spacer()   
+            with ui.VStack(spacing=5):
+                ui.Spacer(height=10)
+                self.openProjectBtn = ui.Button("Open Project", clicked_fn=self.onOpenProjectBtnClick, height=30)
+                ui.Spacer(height=0)
+                self.serverBtn = ui.Button("Connect to Server", clicked_fn=self.onServerBtnClick, height=30)
+                ui.Spacer(height=10)
 
-        self.convaiExt = convai.ConvaiBackend.getInstance(self.convaiBtn, self._window)
+    def onOpenProjectBtnClick(self):
+        if self.isShakespeareStageOpen():
+            print("[Shakespeare AI] Shakespeare project is already open.")
+        else:
+            self.openShakespeareStage()
 
-        if self.convaiExt.onNewUpdateSub is None:
-            self.convaiExt.onNewUpdateSub = (
-                omni.kit.app.get_app()
-                .get_update_event_stream()
-                .create_subscription_to_pop(self.convaiExt.onUIUpdateEvent, name="UI update")
-            )                  
-
-    def onconvaiBtnClick(self):
-        if self.convaiExt and hasattr(self.convaiExt, 'isCapturingAudio'):
-            if self.convaiExt.isCapturingAudio:
-                self.convaiExt.stopConvai()
+    def onServerBtnClick(self):
+        try:
+            if not self.stopEvent:
+                self.stopEvent, self.serverThread = server.start_audio2face_server()
+                self.serverBtn.text = "Disconnect from Server"
+                print("[Shakespeare AI] Connected to server")
             else:
-                self.convaiExt.startConvai()
-        else: 
-            print("[ShakespeareProject] Convai extension not initialized properly.")
+                asyncio.ensure_future(self.stopServerAsync())
+                print("[Shakespeare AI] Disconnected from server")
+        except Exception as e:
+            print(f"[Shakespeare AI] Error with server connection: {e}")
 
-    def selectImage(self):
-        fileImporter = get_file_importer()
-        fileImporter.show_window(
-            title="Import File",
-            import_handler=self.onFileSelected,
-            file_extension_types=[
-                ("jpg", "JPEG image"),
-                ("jpeg", "JPEG image"),
-                ("png", "PNG image"),
-                ("heic", "HEIC image"),
-                ("heif", "HEIF image")
-            ],
-            import_button_label="Select"
-        )
+    def normalizePath(self, path):
+        return path.replace("\\", "/").lower()
 
-    def onFileSelected(self, filename, dirname, selections):
-        if selections:
-            filepath = os.path.join(dirname, selections[0])
-            print(f"Selected file: {filepath}")
-            self.processImage(filepath)
-            convai.appendToCharBackstory(self.geminiResponse) 
+    def isShakespeareStageOpen(self):
+        usdContext = omni.usd.get_context()
+        currentStagePath = self.normalizePath(usdContext.get_stage_url())
+        desiredStagePath = self.normalizePath(self.getShakespeareStageFilePath())
+        print(f"Is Shakespeare stage open? {currentStagePath == desiredStagePath}")
+        return currentStagePath == desiredStagePath
 
-    def processImage(self, imgPath):
-        self.imgWidget.source_url = f"file:///{imgPath.replace(os.sep, '/')}" 
-        self.geminiResponse = gemini.getGeminiResponse(imgPath)
-        print(f"Gemini Response: {self.geminiResponse}")
+    def getShakespeareStageFilePath(self):
+        extPath = omni.kit.app.get_app().get_extension_manager().get_extension_path(self.extId)
+        if not extPath:
+            print("[Shakespeare AI] Failed to get extension path")
+            return None
+        projectRoot = os.path.dirname(os.path.dirname(extPath))
+        return os.path.normpath(os.path.join(projectRoot, "usd", "shakespeare.usd"))
+    
+    def stopServerAsync(self):
+        if self.stopEvent and self.serverThread:
+            server.stop_audio2face_server(self.stopEvent, self.serverThread)
+            self.stopEvent = None
+            self.serverThread = None
+            self.serverBtn.text = "Connect to Server"
+            print("[Shakespeare AI] Disconnected from server")
+
+    def openShakespeareStage(self):
+        stagePath = self.getShakespeareStageFilePath()
+        if not stagePath:
+            return False
+        
+        usdContext = omni.usd.get_context()
+        result, err = usdContext.open_stage(stagePath)
+
+        if result:
+            print(f"[Shakespeare AI] Opened stage: {stagePath}")
+            return True
+        else:
+            print(f"[Shakespeare AI] Failed to open stage: {err}")
+            return False
 
     def on_shutdown(self):
-        print("[Shakespeare Project] Shutdown")
+        print("[Shakespeare AI] Shutdown")
+        if self.stopEvent:
+            server.stop_audio2face_server(self.stopEvent, self.serverThread)
         if self._window:
             self._window.destroy()

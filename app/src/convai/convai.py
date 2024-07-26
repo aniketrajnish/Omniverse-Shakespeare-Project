@@ -129,7 +129,8 @@ class ConvaiBackend(QObject):
             self.audSocketThread.daemon = True
             self.audSocketThread.start()
         except Exception as e:
-            log(f"Error connecting to A2F: {e}", 1)    
+            log(f"Error connecting to A2F: {e}", 1)   
+            self.audSocket = None 
 
     def audioSocketLoop(self):
         while True:
@@ -150,6 +151,8 @@ class ConvaiBackend(QObject):
 
             except Exception as e:
                 log(f"Error sending audio data: {e}", 1)
+                self.audSocket.close()
+                self.audSocket = None
                 break  # Exit the loop on error, but consider if you want to continue or reconnect 
 
     def readConfig(self):

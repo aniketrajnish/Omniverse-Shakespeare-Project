@@ -1,117 +1,178 @@
-import os
-import sys
-from concurrent import futures
-
-import grpc
+import grpc, struct, socket, threading, time
+import audio2face_pb2, audio2face_pb2_grpc
 import numpy as np
-from grpc import _common, _server
-from omni.audio2face.common import log_error, log_info, log_warn
+from pydub import AudioSegment
 
-if 0:  # Use this only during development, this helps to hot-reload grpc/protobuf properly
-    os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
-    from google.protobuf.internal import api_implementation
+class A2FClient:
+    def __init__(self, url, instance_name):
+        self.url = url
+        self.instance_name = instance_name
+        self.channel = grpc.insecure_channel(url)
+        self.stub = audio2face_pb2_grpc.Audio2FaceStub(self.channel)
+        self.channels = 1
+        self.sample_width = 2 
+        self.accumulated_audio = bytearray()
+        self.sample_rate = None
+        self.lock = threading.Lock()
+        self.stream_thread = None
+        self.is_streaming = False
+        self.chunk_duration = .3
+        self.total_duration = 0
 
-    log_warn("DEV MODE (turn it off in production): api_implementation.Type() == {}".format(api_implementation.Type()))
+    def append_audio_data(self, audio_data, sample_rate):
+        with self.lock:
+            if self.sample_rate is None:
+                self.sample_rate = sample_rate
+            elif self.sample_rate != sample_rate:
+                print(f"[A2FClient] Warning: Sample rate changed from {self.sample_rate} to {sample_rate}")
+                self.sample_rate = sample_rate
 
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, ROOT_DIR)
-import audio2face_pb2
-import audio2face_pb2_grpc
-
-
-class Audio2FaceServicer(audio2face_pb2_grpc.Audio2FaceServicer):
-    def __init__(self, audio_start_callback, push_chunk_callback, audio_end_callback):
-        self._audio_start_callback = audio_start_callback
-        self._push_chunk_callback = push_chunk_callback
-        self._audio_end_callback = audio_end_callback
-
-    def PushAudio(self, request, context):
-        instance_name = request.instance_name
-        samplerate = request.samplerate
-        block_until_playback_is_finished = request.block_until_playback_is_finished
-        audio_data = np.frombuffer(request.audio_data, dtype=np.float32)
-        log_info(
-            "PushAudio request: [instance_name = {} ; samplerate = {} ; data.shape = {}]".format(
-                instance_name, samplerate, audio_data.shape
+            audio_segment = AudioSegment(
+                data=audio_data,
+                sample_width=self.sample_width,
+                frame_rate=sample_rate,
+                channels=self.channels
             )
-        )
-        if self._audio_start_callback is not None:
-            try:
-                self._audio_start_callback(instance_name, samplerate)
-            except RuntimeError as e:
-                return audio2face_pb2.PushAudioResponse(success=False, message=str(e))
-        if self._push_chunk_callback is not None:
-            try:
-                self._push_chunk_callback(instance_name, audio_data)
-            except RuntimeError as e:
-                return audio2face_pb2.PushAudioResponse(success=False, message=str(e))
-        if self._audio_end_callback is not None:
-            try:
-                self._audio_end_callback(instance_name, block_until_playback_is_finished)
-            except RuntimeError as e:
-                return audio2face_pb2.PushAudioResponse(success=False, message=str(e))
-        log_info("PushAudio request -- DONE")
-        return audio2face_pb2.PushAudioResponse(success=True, message="")
+            audio_segment = audio_segment.fade_in(25).fade_out(25)
+            self.accumulated_audio += audio_segment.raw_data            
 
-    def PushAudioStream(self, request_iterator, context):
-        first_item = next(request_iterator)
-        if not first_item.HasField("start_marker"):
-            return audio2face_pb2.PushAudioResponse(
-                success=False, message="First item in the request should containt start_marker"
+        if not self.is_streaming:
+            self.start_streaming()
+
+    def start_streaming(self):
+        if self.is_streaming:
+            return
+        self.is_streaming = True
+        self.stream_thread = threading.Thread(target=self.stream_audio)
+        self.stream_thread.start()
+
+    def stream_audio(self):
+        def generate_audio_chunks():
+            start_marker = audio2face_pb2.PushAudioRequestStart(
+                samplerate=self.sample_rate,
+                instance_name=self.instance_name,
+                block_until_playback_is_finished=False,
             )
-        instance_name = first_item.start_marker.instance_name
-        samplerate = first_item.start_marker.samplerate
-        block_until_playback_is_finished = first_item.start_marker.block_until_playback_is_finished
-        log_info("PushAudioStream request: [instance_name = {} ; samplerate = {}]".format(instance_name, samplerate))
-        if self._audio_start_callback is not None:
+            yield audio2face_pb2.PushAudioStreamRequest(start_marker=start_marker)           
+
+            while self.is_streaming:
+                with self.lock:
+                    chunk_size = int(self.sample_rate * 2 * self.chunk_duration)
+                    if len(self.accumulated_audio) >= chunk_size:
+                        audio_chunk = self.accumulated_audio[:chunk_size]
+                        self.accumulated_audio = self.accumulated_audio[chunk_size:]
+                    else:
+                        audio_chunk = None
+
+                if audio_chunk:
+                    audio_np = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
+                    yield audio2face_pb2.PushAudioStreamRequest(audio_data=audio_np.tobytes())
+                    time.sleep(.2)
+                else:
+                    time.sleep(.01)
+
+        try:
+            response = self.stub.PushAudioStream(generate_audio_chunks())
+            if response.success:
+                print("[A2FClient] Audio stream completed successfully")
+            else:
+                print(f"[A2FClient] Error in audio stream: {response.message}")
+        except Exception as e:
+            print(f"[A2FClient] Error during audio streaming: {e}")
+
+    def stop_streaming(self):
+        self.is_streaming = False
+        if self.stream_thread:
+            self.stream_thread.join()
+
+HOST = 'localhost'
+PORT = 65432
+BUFFER_SIZE = 4194304  # 4MB
+
+def run_audio2face_server(stop_event):
+    a2f_client = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, PORT))
+        s.listen()
+        s.settimeout(1)  # Set a timeout for the accept() call
+        print(f"[Audio2Face Socket Server] Waiting for a connection on {HOST}:{PORT}")
+
+        while not stop_event.is_set():
             try:
-                self._audio_start_callback(instance_name, samplerate)
-            except RuntimeError as e:
-                return audio2face_pb2.PushAudioResponse(success=False, message=str(e))
+                conn, addr = s.accept()
+                print(f"[Audio2Face Socket Server] Connected by {addr}")
+                client_thread = threading.Thread(target=handle_client, args=(conn, a2f_client, stop_event))
+                client_thread.start()
+            except socket.timeout:
+                continue
+            except Exception as e:
+                print(f"[Audio2Face Socket Server] Error: {e}")
+                break
 
-        for item in request_iterator:
-            audio_data = np.frombuffer(item.audio_data, dtype=np.float32)
-            if self._push_chunk_callback is not None and instance_name is not None:
-                try:
-                    self._push_chunk_callback(instance_name, audio_data)
-                except RuntimeError as e:
-                    return audio2face_pb2.PushAudioResponse(success=False, message=str(e))
+    # Stop the A2FClient
+    if a2f_client.is_streaming:
+        a2f_client.stop_streaming()
 
-        if self._audio_end_callback is not None and instance_name is not None:
-            try:
-                self._audio_end_callback(instance_name, block_until_playback_is_finished)
-            except RuntimeError as e:
-                return audio2face_pb2.PushAudioResponse(success=False, message=str(e))
-        log_info("PushAudioStream request -- DONE")
-        return audio2face_pb2.PushAudioResponse(success=True, message="")
+    print("[Audio2Face Socket Server] Server stopped.")
 
+def handle_client(conn, a2f_client, stop_event):
+    try:
+        while not stop_event.is_set():
+            message_length_data = conn.recv(4)
+            if not message_length_data:
+                print("[Audio2Face Socket Server] Client disconnected.")
+                break
+            message_length = struct.unpack('>i', message_length_data)[0]
 
-class StreamingServer:
-    def __init__(self):
-        self._server = None
-        self._max_workers = 10  # ADJUST
-        self._port = "50051"  # ADJUST
-        self._address = f"[::]:{self._port}"  # ADJUST
+            print(f"[Audio2Face Socket Server] Receiving message of length: {message_length}")
 
-    def start(self, audio_start_callback, push_chunk_callback, audio_end_callback):
-        log_info("StreamingServer -- START")
-        self._server = grpc.server(futures.ThreadPoolExecutor(max_workers=self._max_workers))
-        audio2face_pb2_grpc.add_Audio2FaceServicer_to_server(
-            Audio2FaceServicer(audio_start_callback, push_chunk_callback, audio_end_callback), self._server
-        )
-        success = _server._add_insecure_port(self._server._state, _common.encode(self._address))
-        while success == 0:
-            self._port = str(int(self._port) + 1)
-            self._address = f"[::]:{self._port}"
-            success = _server._add_insecure_port(self._server._state, _common.encode(self._address))
-        self._server.start()
-        log_info("StreamingServer -- START -- Done")
+            data = bytearray()
+            bytes_received = 0
+            while bytes_received < message_length:
+                chunk = conn.recv(min(BUFFER_SIZE, message_length - bytes_received))
+                if not chunk:
+                    print("[Audio2Face Socket Server] Connection closed before receiving complete message.")
+                    return
+                data.extend(chunk)
+                bytes_received += len(chunk)
 
-    def shutdown(self):
-        log_info("StreamingServer -- SHUTDOWN")
-        self._server.stop(None)
-        self._server = None
-        log_info("StreamingServer -- SHUTDOWN -- Done")
+            if bytes_received != message_length:
+                print(f"[Audio2Face Socket Server] Received incomplete message! Expected {message_length} bytes, got {bytes_received}.")
+                continue
 
-    def get_port(self):
-        return self._port
+            sample_rate_bytes, audio_data = data.split(b'|', 1)
+            sample_rate = struct.unpack('>i', sample_rate_bytes)[0]
+
+            print(f"[Audio2Face Socket Server] Received audio data: length={len(audio_data)}, sample_rate={sample_rate}")
+
+            a2f_client.append_audio_data(audio_data, sample_rate)
+
+    except Exception as e:
+        print(f"[Audio2Face Socket Server] Error receiving audio data: {e}")
+    finally:
+        conn.close()
+
+# This function can be called from the UI module to start the server
+def start_audio2face_server():
+    stop_event = threading.Event()
+    server_thread = threading.Thread(target=run_audio2face_server, args=(stop_event,))
+    server_thread.start()
+    return stop_event, server_thread
+
+# This function can be called from the UI module to stop the server
+def stop_audio2face_server(stop_event, server_thread):
+    stop_event.set()
+    server_thread.join(timeout=5)  # Wait for up to 5 seconds
+    if server_thread.is_alive():
+        print("[Audio2Face Socket Server] Server thread did not stop in time. Forcing shutdown.")
+
+if __name__ == "__main__":
+    # This is just for testing the server independently
+    stop_event, server_thread = start_audio2face_server()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Stopping server...")
+        stop_audio2face_server(stop_event, server_thread)
