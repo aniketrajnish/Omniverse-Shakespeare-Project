@@ -1,6 +1,7 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
 from convai import convai
 from gemini import gemini
+import os, sys
 
 class ShakespeareWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -15,7 +16,8 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
 
     def initWindow(self):
         self.setWindowTitle('Shakespeare AI')
-        self.setWindowIcon(QtGui.QIcon('misc/sp_logo.png'))
+        basePath = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+        self.setWindowIcon(QtGui.QIcon(os.path.join(basePath, 'misc/sp_logo.png')))
         self.setFixedSize(400, 400)
         self.show()
 
