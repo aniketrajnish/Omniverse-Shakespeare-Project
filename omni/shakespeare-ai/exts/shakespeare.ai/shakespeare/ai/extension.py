@@ -2,12 +2,14 @@ import omni.ext, omni.usd, omni.kit.app, os, asyncio, subprocess
 import omni.ui as ui
 from .a2f import server
 import omni.usd
+import psutil
 
 class ShakespeareProjectExtension(omni.ext.IExt):
     def __init__(self):
         super().__init__()
         self.stopEvent = None
         self.serverThread = None
+        self.convoProcess = None
 
     def on_startup(self, ext_id):
         print("[Shakespeare AI] Startup") 
@@ -15,15 +17,13 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         self.initUI()
 
     def initUI(self):
-        self._window = ui.Window("Shakespeare AI Server", width=225, height=175)
+        self._window = ui.Window("Shakespeare AI Server", width=225, height=125)
         with self._window.frame:
             with ui.VStack(spacing=5):
                 ui.Spacer(height=10)
                 self.openProjectBtn = ui.Button("Open Project", clicked_fn=self.onOpenProjectBtnClick, height=30)
-                ui.Spacer(height=0)
                 self.serverBtn = ui.Button("Connect to Server", clicked_fn=self.onServerBtnClick, height=30)
-                ui.Spacer(height=0)
-                self.convoBtn = ui.Button("Open Conversation Window", clicked_fn=self.onConvoBtnClick, height=30)
+                ui.Spacer(height=10)
 
     def onOpenProjectBtnClick(self):
         if self.isShakespeareStageOpen():
@@ -37,21 +37,46 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                 self.stopEvent, self.serverThread = server.start_audio2face_server()
                 self.serverBtn.text = "Disconnect from Server"
                 print("[Shakespeare AI] Connected to server")
+                self.openConversationWindow()
             else:
                 asyncio.ensure_future(self.stopServerAsync())
-                print("[Shakespeare AI] Disconnected from server")
         except Exception as e:
             print(f"[Shakespeare AI] Error with server connection: {e}")
 
-    def onConvoBtnClick(self):
+    def openConversationWindow(self):
         try:
             extPath = omni.kit.app.get_app().get_extension_manager().get_extension_path(self.extId)
             rootPath = os.path.join(extPath, "..", "..", "..", "..")
             exePath = os.path.normpath(os.path.join(rootPath, "app", "build", "Shakespeare AI.exe"))
-            subprocess.Popen([exePath])
-            print("[Shakespeare AI] Opened conversation window")
+            self.convoProcess = subprocess.Popen([exePath])
+            print(f"[Shakespeare AI] Opened conversation window with PID: {self.convoProcess.pid}")
+            asyncio.ensure_future(self.monitorConversationWindow())
         except Exception as e:
             print(f"[Shakespeare AI] Error opening conversation window: {e}")
+
+    def closeConversationWindow(self):
+        if self.convoProcess:
+            try:
+                process = psutil.Process(self.convoProcess.pid)
+                for child in process.children(recursive=True):
+                    child.terminate()
+                process.terminate()
+                process.wait(timeout=5)  # Wait for up to 5 seconds
+                print(f"[Shakespeare AI] Closed conversation window with PID: {self.convoProcess.pid}")
+            except psutil.NoSuchProcess:
+                print("[Shakespeare AI] Conversation window process not found")
+            except Exception as e:
+                print(f"[Shakespeare AI] Error closing conversation window: {e}")
+            finally:
+                self.convoProcess = None
+
+    async def monitorConversationWindow(self):
+        while True:
+            await asyncio.sleep(1)
+            if self.convoProcess is None or self.convoProcess.poll() is not None:
+                print("[Shakespeare AI] Conversation window closed")
+                await self.stopServerAsync()
+                break
 
     def normalizePath(self, path):
         return path.replace("\\", "/").lower()
@@ -71,13 +96,14 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         projectRoot = os.path.dirname(os.path.dirname(extPath))
         return os.path.normpath(os.path.join(projectRoot, "usd", "shakespeare.usd"))
     
-    def stopServerAsync(self):
+    async def stopServerAsync(self):
         if self.stopEvent and self.serverThread:
             server.stop_audio2face_server(self.stopEvent, self.serverThread)
             self.stopEvent = None
             self.serverThread = None
             self.serverBtn.text = "Connect to Server"
             print("[Shakespeare AI] Disconnected from server")
+            self.closeConversationWindow()
 
     def openShakespeareStage(self):
         stagePath = self.getShakespeareStageFilePath()
@@ -97,6 +123,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
     def on_shutdown(self):
         print("[Shakespeare AI] Shutdown")
         if self.stopEvent:
-            server.stop_audio2face_server(self.stopEvent, self.serverThread)
+            asyncio.get_event_loop().run_until_complete(self.stopServerAsync())
+        self.closeConversationWindow()
         if self._window:
             self._window.destroy()
