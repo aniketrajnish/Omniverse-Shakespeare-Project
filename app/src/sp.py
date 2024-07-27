@@ -13,12 +13,13 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
         self.initWindow()
         self.initLayouts()
         self.initComponents()
+        self.applyOvStylesheet()
 
     def initWindow(self):
         self.setWindowTitle('Shakespeare AI')
         basePath = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
         self.setWindowIcon(QtGui.QIcon(os.path.join(basePath, 'misc/sp_logo.png')))
-        self.setFixedSize(400, 400)
+        self.setFixedSize(400, 500)
         self.show()
 
     def initLayouts(self):
@@ -109,3 +110,40 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
 
     def showMsg(self, msg):
         self.statusBar.showMessage(msg, 50000) 
+
+    def applyOvStylesheet(self):
+        # Define the stylesheet to mimic Omniverse's grey theme with white text
+        stylesheet = """
+        QMainWindow {
+            background-color: #454444;
+            color: white;
+        }
+        QPushButton {
+            background-color: #282829;
+            color: white;
+            border: 1px solid #555555;
+            padding: 5px;
+        }
+        QPushButton:hover {
+            background-color: #555555;
+        }
+        QLabel {
+            color: white;
+        }
+        QGroupBox {
+            border: 1px solid #555555;
+            margin-top: 10px;
+            padding: 10px;
+            color: white;
+        }
+        QStatusBar {
+            background-color: #454444;
+            color: white;
+        }
+        """
+        self.setStyleSheet(stylesheet)
+
+if __name__ == '__main__':
+    app = QtWidgets.QApplication(sys.argv)
+    ex = ShakespeareWindow()
+    sys.exit(app.exec_())
