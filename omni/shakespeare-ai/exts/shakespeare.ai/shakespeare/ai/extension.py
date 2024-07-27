@@ -15,7 +15,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         self.initUI()
 
     def initUI(self):
-        self._window = ui.Window("Shakespeare AI Server", width=200, height=150)
+        self._window = ui.Window("Shakespeare AI Server", width=225, height=175)
         with self._window.frame:
             with ui.VStack(spacing=5):
                 ui.Spacer(height=10)
