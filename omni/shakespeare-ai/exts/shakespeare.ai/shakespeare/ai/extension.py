@@ -34,7 +34,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
     def onServerBtnClick(self):
         try:
             if not self.stopEvent:
-                self.stopEvent, self.serverThread = server.start_audio2face_server()
+                self.stopEvent, self.serverThread = server.startA2FServer()
                 self.serverBtn.text = "Disconnect from Server"
                 print("[Shakespeare AI] Connected to server")
                 self.openConversationWindow()
@@ -98,7 +98,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
     
     async def stopServerAsync(self):
         if self.stopEvent and self.serverThread:
-            server.stop_audio2face_server(self.stopEvent, self.serverThread)
+            server.stopA2FServer(self.stopEvent, self.serverThread)
             self.stopEvent = None
             self.serverThread = None
             self.serverBtn.text = "Connect to Server"
