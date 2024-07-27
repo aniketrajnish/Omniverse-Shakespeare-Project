@@ -15,7 +15,7 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
 
     def initWindow(self):
         self.setWindowTitle('Shakespeare AI')
-        self.setWindowIcon(QtGui.QIcon('misc/logo.png'))
+        self.setWindowIcon(QtGui.QIcon('misc/sp_logo.png'))
         self.setFixedSize(400, 400)
         self.show()
 
