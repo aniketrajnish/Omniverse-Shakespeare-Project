@@ -66,7 +66,7 @@ class A2FClient:
                 if audChunk:
                     audNp = np.frombuffer(audChunk, dtype=np.int16).astype(np.float32) / 32768.0
                     yield audio2face_pb2.PushAudioStreamRequest(audio_data=audNp.tobytes())
-                    time.sleep(.2)
+                    time.sleep(self.chunkDuration - .1)
                 else:
                     time.sleep(.01)
 
@@ -94,7 +94,7 @@ def runA2FServer(stopEvent):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, PORT))
         s.listen()
-        s.settimeout(1)  # Set a timeout for the accept() call
+        s.settimeout(1)  
         print(f"[Audio2Face Socket Server] Waiting for a connection on {HOST}:{PORT}")
 
         while not stopEvent.is_set():
@@ -108,8 +108,7 @@ def runA2FServer(stopEvent):
             except Exception as e:
                 print(f"[Audio2Face Socket Server] Error: {e}")
                 break
-
-    # Stop the A2FClient
+ 
     if a2fClient.isStreaming:
         a2fClient.stopStreaming()
 
@@ -152,16 +151,14 @@ def handleClient(conn, a2fClient, stopEvent):
     finally:
         conn.close()
 
-# This function can be called from the UI module to start the server
 def startA2FServer():
     stopEvent = threading.Event()
     serverThread = threading.Thread(target=runA2FServer, args=(stopEvent,))
     serverThread.start()
     return stopEvent, serverThread
 
-# This function can be called from the UI module to stop the server
 def stopA2FServer(stopEvent, serverThread):
     stopEvent.set()
-    serverThread.join(timeout=5)  # Wait for up to 5 seconds
+    serverThread.join(timeout=5) 
     if serverThread.is_alive():
         print("[Audio2Face Socket Server] Server thread did not stop in time. Forcing shutdown.")
