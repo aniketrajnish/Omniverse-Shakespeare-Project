@@ -13,8 +13,6 @@ _*/
 
 /FIEA
 
-/app/src/gemini/gemini.env
-/app/src/convai/convai.env
 /app/src/gemini/config.json
 /app/src/dist
 /app/src/build
