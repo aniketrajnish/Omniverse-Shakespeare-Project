@@ -1,9 +1,5 @@
-import requests
-import json
-import os
-import configparser
-from . import image
-from . import helpers
+import requests, json, os, configparser
+from . import image, helpers
 
 def loadGeminiConfig():
     configPath = os.path.join(helpers.currPath(), 'gemini.env')

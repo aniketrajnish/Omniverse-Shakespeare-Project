@@ -152,7 +152,7 @@ class ConvaiBackend(QObject):
                 log(f"Error sending audio data: {e}", 1)
                 self.audSocket.close()
                 self.audSocket = None
-                break  # Exit the loop on error, but consider if you want to continue or reconnect 
+                break 
 
     def readConfig(self):
         config = configparser.ConfigParser()
@@ -384,10 +384,7 @@ class ConvaiGRPCGetResponseProxy:
             api_key=self.parent.apiKey,
             audio_config=convaiServiceMsg.AudioConfig(
                 sample_rate_hertz=RATE
-            ),
-            # You can add any other necessary configuration here
-            # For example, if you need to set a language:
-            # language="en-US",
+            ),            
         )
         
         if self.parent.sessionId and self.parent.sessionId != "":

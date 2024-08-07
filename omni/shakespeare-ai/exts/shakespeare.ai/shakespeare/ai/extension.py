@@ -1,8 +1,9 @@
-import omni.ext, omni.usd, omni.kit.app, os, asyncio, subprocess
+import omni.ext, omni.usd, omni.kit.app, os, asyncio, subprocess, psutil
 import omni.ui as ui
 from .a2f import server
-import omni.usd
-import psutil
+
+def log(text: str, warning: bool = False):
+    print(f"[Shakespeare AI] {'[Warning]' if warning else ''} {text}")
 
 class ShakespeareProjectExtension(omni.ext.IExt):
     def __init__(self):
@@ -12,7 +13,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         self.convoProcess = None
 
     def on_startup(self, ext_id):
-        print("[Shakespeare AI] Startup") 
+        log("Startup")
         self.extId = ext_id    
         self.initUI()
 
@@ -27,7 +28,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
 
     def onOpenProjectBtnClick(self):
         if self.isShakespeareStageOpen():
-            print("[Shakespeare AI] Shakespeare project is already open.")
+            log("Shakespeare project is already open.")
         else:
             self.openShakespeareStage()
 
@@ -36,12 +37,12 @@ class ShakespeareProjectExtension(omni.ext.IExt):
             if not self.stopEvent:
                 self.stopEvent, self.serverThread = server.startA2FServer()
                 self.serverBtn.text = "Disconnect from Server"
-                print("[Shakespeare AI] Connected to server")
+                log("Connected to server")
                 self.openConversationWindow()
             else:
                 asyncio.ensure_future(self.stopServerAsync())
         except Exception as e:
-            print(f"[Shakespeare AI] Error with server connection: {e}")
+            log(f"Error with server connection: {e}", warning=True)
 
     def openConversationWindow(self):
         try:
@@ -49,10 +50,10 @@ class ShakespeareProjectExtension(omni.ext.IExt):
             rootPath = os.path.join(extPath, "..", "..", "..", "..")
             exePath = os.path.normpath(os.path.join(rootPath, "app", "build", "Shakespeare AI.exe"))
             self.convoProcess = subprocess.Popen([exePath])
-            print(f"[Shakespeare AI] Opened conversation window with PID: {self.convoProcess.pid}")
+            log(f"Opened conversation window with PID: {self.convoProcess.pid}")
             asyncio.ensure_future(self.monitorConversationWindow())
         except Exception as e:
-            print(f"[Shakespeare AI] Error opening conversation window: {e}")
+            log(f"Error opening conversation window: {e}", warning=True)
 
     def closeConversationWindow(self):
         if self.convoProcess:
@@ -62,11 +63,11 @@ class ShakespeareProjectExtension(omni.ext.IExt):
                     child.terminate()
                 process.terminate()
                 process.wait(timeout=5)  # Wait for up to 5 seconds
-                print(f"[Shakespeare AI] Closed conversation window with PID: {self.convoProcess.pid}")
+                log(f"Closed conversation window with PID: {self.convoProcess.pid}")
             except psutil.NoSuchProcess:
-                print("[Shakespeare AI] Conversation window process not found")
+                log("Conversation window process not found", warning=True)
             except Exception as e:
-                print(f"[Shakespeare AI] Error closing conversation window: {e}")
+                log(f"Error closing conversation window: {e}", warning=True)
             finally:
                 self.convoProcess = None
 
@@ -74,7 +75,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         while True:
             await asyncio.sleep(1)
             if self.convoProcess is None or self.convoProcess.poll() is not None:
-                print("[Shakespeare AI] Conversation window closed")
+                log("Conversation window closed")
                 await self.stopServerAsync()
                 break
 
@@ -85,13 +86,13 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         usdContext = omni.usd.get_context()
         currentStagePath = self.normalizePath(usdContext.get_stage_url())
         desiredStagePath = self.normalizePath(self.getShakespeareStageFilePath())
-        print(f"Is Shakespeare stage open? {currentStagePath == desiredStagePath}")
+        log(f"Is Shakespeare stage open? {currentStagePath == desiredStagePath}")
         return currentStagePath == desiredStagePath
 
     def getShakespeareStageFilePath(self):
         extPath = omni.kit.app.get_app().get_extension_manager().get_extension_path(self.extId)
         if not extPath:
-            print("[Shakespeare AI] Failed to get extension path")
+            log("Failed to get extension path", warning=True)
             return None
         projectRoot = os.path.dirname(os.path.dirname(extPath))
         return os.path.normpath(os.path.join(projectRoot, "usd", "shakespeare.usd"))
@@ -102,7 +103,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
             self.stopEvent = None
             self.serverThread = None
             self.serverBtn.text = "Connect to Server"
-            print("[Shakespeare AI] Disconnected from server")
+            log("Disconnected from server")
             self.closeConversationWindow()
 
     def openShakespeareStage(self):
@@ -114,14 +115,14 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         result, err = usdContext.open_stage(stagePath)
 
         if result:
-            print(f"[Shakespeare AI] Opened stage: {stagePath}")
+            log(f"Opened stage: {stagePath}")
             return True
         else:
-            print(f"[Shakespeare AI] Failed to open stage: {err}")
+            log(f"Failed to open stage: {err}", warning=True)
             return False
 
     def on_shutdown(self):
-        print("[Shakespeare AI] Shutdown")
+        log("Shutdown")
         if self.stopEvent:
             asyncio.get_event_loop().run_until_complete(self.stopServerAsync())
         self.closeConversationWindow()
