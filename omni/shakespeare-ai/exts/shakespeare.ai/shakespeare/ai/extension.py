@@ -1,4 +1,4 @@
-import omni.ext, omni.usd, omni.kit.app, os, asyncio, subprocess, psutil
+import omni.ext, omni.usd, omni.kit.app, os, asyncio, subprocess, psutil, carb.events
 import omni.ui as ui
 from .a2f import server
 
@@ -16,6 +16,7 @@ class ShakespeareProjectExtension(omni.ext.IExt):
         log("Startup")
         self.extId = ext_id    
         self.initUI()
+        self.registerShutDownListener()
 
     def initUI(self):
         self._window = ui.Window("Shakespeare AI Server", width=225, height=125)
@@ -121,10 +122,23 @@ class ShakespeareProjectExtension(omni.ext.IExt):
             log(f"Failed to open stage: {err}", warning=True)
             return False
 
+    def registerShutDownListener(self):
+        shutdownStream = omni.kit.app.get_app().get_shutdown_event_stream()
+        self.shutdownStub = shutdownStream.create_subscription_to_pop(
+            self.onAppShutdown,
+            name = 'SPAIShutdownListener'
+        )
+
+    def onAppShutdown(self, e: carb.events.IEvent):
+        if e.type == omni.kit.app.POST_QUIT_EVENT_TYPE:
+            log("Ov about to shutdown")
+            self.closeConversationWindow()
+
     def on_shutdown(self):
         log("Shutdown")
+        if hasattr(self, "shutdownStub"):
+            self.shutdownStub = None
         if self.stopEvent:
-            asyncio.get_event_loop().run_until_complete(self.stopServerAsync())
-        self.closeConversationWindow()
+            asyncio.get_event_loop().run_until_complete(self.stopServerAsync())        
         if self._window:
             self._window.destroy()
