@@ -99,9 +99,11 @@ class ConvaiBackend(QObject):
     def initVars(self):
         self.audQueue = deque(maxlen=4096 * 8)
         self.audSocket = None
+        self.cntrlSocket = None
         self.audSocketThread = None
         self.a2fHst = 'localhost'
         self.a2fPrt = 65432
+        self.cntrlPrt = 65433
         self.audQueueCondition = threading.Condition()
 
         self.isCapturingAudio = False
@@ -130,6 +132,15 @@ class ConvaiBackend(QObject):
         except Exception as e:
             log(f"Error connecting to A2F: {e}", 1)   
             self.audSocket = None 
+
+    def connectControlSocket(self):
+        try:
+            self.cntrlSocket = socket(AF_INET, SOCK_STREAM)
+            self.cntrlSocket.connect((self.a2fHst, self.cntrlPrt))
+            log("Connected to control socket")
+        except Exception as e:
+            log(f"Error connecting to control socket: {e}", 1)
+            self.cntrlSocket = None
 
     def audioSocketLoop(self):
         while True:
@@ -184,6 +195,8 @@ class ConvaiBackend(QObject):
             self.OldCharacterID = self.charId
             self.sessionId = ""
 
+        self.sendStopSignalToA2F()
+
         self.updateBtnText("Stop")
         self.startMic()
         self.convaiGRPCGetResponseProxy = ConvaiGRPCGetResponseProxy(self)
@@ -196,6 +209,15 @@ class ConvaiBackend(QObject):
 
         self.readMicAndSendToGrpc(True)  
         self.stopMic() 
+
+    def sendStopSignalToA2F(self):
+        try:
+            if self.cntrlSocket:
+                self.cntrlSocket.sendall(b"stop")
+                log("Sent stop signal to A2F")
+        except Exception as e:
+            log(f"Error sending stop signal to A2F: {e}", 1)
+            self.cntrlSocket = None        
 
     def startMic(self):
         if self.isCapturingAudio:

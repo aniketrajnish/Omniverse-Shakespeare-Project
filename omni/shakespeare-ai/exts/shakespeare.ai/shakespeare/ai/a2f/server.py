@@ -85,17 +85,25 @@ class A2FClient:
             self.streamThread.join()
 
 HOST = 'localhost'
-PORT = 65432
+AUD_PORT = 65432
+CNTRL_PORT = 65433
 BUFFER_SIZE = 4194304  # 4MB
 
 def runA2FServer(stopEvent):
     a2fClient = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
+    cntrlSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    cntrlSocket.bind((HOST, CNTRL_PORT))
+    cntrlSocket.listen(1)
+    cntrlSocket.settimeout(1)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((HOST, PORT))
+        s.bind((HOST, AUD_PORT))
         s.listen()
         s.settimeout(1)  
-        print(f"[Audio2Face Socket Server] Waiting for a connection on {HOST}:{PORT}")
+        print(f"[Audio2Face Socket Server] Waiting for a connection on {HOST}:{AUD_PORT}")
+
+        cntrlThread = threading.Thread(target=handleCntrlSocket, args=(cntrlSocket, a2fClient, stopEvent))
+        cntrlThread.start()
 
         while not stopEvent.is_set():
             try:
@@ -113,6 +121,24 @@ def runA2FServer(stopEvent):
         a2fClient.stopStreaming()
 
     print("[Audio2Face Socket Server] Server stopped.")
+
+def handleCntrlSocket(cntrlSocket, a2fClient, stopEvent):
+    while not stopEvent.is_set():
+        try:
+            conn, addr = cntrlSocket.accept()
+            print(f"[Audio2Face Socket Server] Control connection established with {addr}")
+            data = conn.recv(4)
+            if data == b'stop':
+                print("[Audio2Face Socket Server] Received stop command")
+                if a2fClient.isStreaming:
+                    a2fClient.stopStreaming()
+                    a2fClient = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
+                conn.close()
+        except socket.timeout:
+            continue
+        except Exception as e:
+            print(f"[Audio2Face Socket Server] Error: {e}")
+            break
 
 def handleClient(conn, a2fClient, stopEvent):
     try:
