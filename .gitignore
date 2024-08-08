@@ -22,3 +22,4 @@ _*/
 /omni/shakespeare-ai/exts/shakespeare.ai/shakespeare/ai/convai/convai.env
 /omni/shakespeare-ai/exts/shakespeare.ai/shakespeare/ai/gemini/gemini.env
 *.env
+*.env
