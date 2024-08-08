@@ -133,7 +133,7 @@ class ConvaiBackend(QObject):
             log(f"Error connecting to A2F: {e}", 1)   
             self.audSocket = None 
 
-    def connectControlSocket(self):
+    def connectCntrlSocket(self):
         try:
             self.cntrlSocket = socket(AF_INET, SOCK_STREAM)
             self.cntrlSocket.connect((self.a2fHst, self.cntrlPrt))
@@ -202,6 +202,8 @@ class ConvaiBackend(QObject):
         self.convaiGRPCGetResponseProxy = ConvaiGRPCGetResponseProxy(self)
         if not self.audSocket:
             self.connectToA2F()
+        if not self.cntrlSocket:
+            self.connectCntrlSocket()
 
     def stopConvai(self):
         self.updateBtnText("Processing...")

@@ -91,56 +91,78 @@ BUFFER_SIZE = 4194304  # 4MB
 
 def runA2FServer(stopEvent):
     a2fClient = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
+    
+    audSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    audSocket.bind((HOST, AUD_PORT))
+    audSocket.listen(1)
+    audSocket.settimeout(1)
+    print(f"[Audio2Face Socket Server] Waiting for an audio connection on {HOST}:{AUD_PORT}")
+
     cntrlSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     cntrlSocket.bind((HOST, CNTRL_PORT))
     cntrlSocket.listen(1)
     cntrlSocket.settimeout(1)
+    print(f"[Audio2Face Socket Server] Waiting for a control connection on {HOST}:{CNTRL_PORT}")
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((HOST, AUD_PORT))
-        s.listen()
-        s.settimeout(1)  
-        print(f"[Audio2Face Socket Server] Waiting for a connection on {HOST}:{AUD_PORT}")
+    audThread = threading.Thread(target=handleAudioSocket, args=(audSocket, a2fClient, stopEvent))
+    cntrlThread = threading.Thread(target=handleCntrlSocket, args=(cntrlSocket, a2fClient, stopEvent))
+    
+    audThread.start()
+    cntrlThread.start()
 
-        cntrlThread = threading.Thread(target=handleCntrlSocket, args=(cntrlSocket, a2fClient, stopEvent))
-        cntrlThread.start()
+    audThread.join()
+    cntrlThread.join()
 
-        while not stopEvent.is_set():
-            try:
-                conn, addr = s.accept()
-                print(f"[Audio2Face Socket Server] Connected by {addr}")
-                clientThread = threading.Thread(target=handleClient, args=(conn, a2fClient, stopEvent))
-                clientThread.start()
-            except socket.timeout:
-                continue
-            except Exception as e:
-                print(f"[Audio2Face Socket Server] Error: {e}")
-                break
- 
     if a2fClient.isStreaming:
         a2fClient.stopStreaming()
 
+    audSocket.close()
+    cntrlSocket.close()
     print("[Audio2Face Socket Server] Server stopped.")
+
+def handleAudioSocket(audSocket, a2fClient, stopEvent):
+    while not stopEvent.is_set():
+        try:
+            conn, addr = audSocket.accept()
+            print(f"[Audio2Face Socket Server] Audio connection established with {addr}")
+            clientThread = threading.Thread(target=handleAudClient, args=(conn, a2fClient, stopEvent))
+            clientThread.start()
+        except socket.timeout:
+            continue
+        except Exception as e:
+            print(f"[Audio2Face Socket Server] Audio socket error: {e}")
+            break
 
 def handleCntrlSocket(cntrlSocket, a2fClient, stopEvent):
     while not stopEvent.is_set():
         try:
             conn, addr = cntrlSocket.accept()
             print(f"[Audio2Face Socket Server] Control connection established with {addr}")
+            cntrlThread = threading.Thread(target=handleCntrlClient, args=(conn, a2fClient, stopEvent))
+            cntrlThread.start()
+        except socket.timeout:
+            continue
+        except Exception as e:
+            print(f"[Audio2Face Socket Server] Control socket error: {e}")
+            break
+
+def handleCntrlClient(conn, a2fClient, stopEvent):
+    try:
+        while not stopEvent.is_set():
             data = conn.recv(4)
+            if not data:
+                break
             if data == b'stop':
                 print("[Audio2Face Socket Server] Received stop command")
                 if a2fClient.isStreaming:
                     a2fClient.stopStreaming()
                     a2fClient = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
-                conn.close()
-        except socket.timeout:
-            continue
-        except Exception as e:
-            print(f"[Audio2Face Socket Server] Error: {e}")
-            break
+    except Exception as e:
+        print(f"[Audio2Face Socket Server] Control client error: {e}")
+    finally:
+        conn.close()
 
-def handleClient(conn, a2fClient, stopEvent):
+def handleAudClient(conn, a2fClient, stopEvent):
     try:
         while not stopEvent.is_set():
             msgLenData = conn.recv(4)
