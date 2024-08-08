@@ -27,15 +27,15 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.centralWidget)
         self.mainLayout = QtWidgets.QVBoxLayout(self.centralWidget)
 
-        self.btnLayout = QtWidgets.QHBoxLayout()
-        self.mainLayout.addLayout(self.btnLayout)
-
     def initComponents(self):
         self.initBtns()
         self.initImgHolder()
         self.initStatusBar()
 
     def initBtns(self):
+        self.btnLayout = QtWidgets.QHBoxLayout()
+        self.mainLayout.addLayout(self.btnLayout)
+
         self.selectImgBtn = QtWidgets.QPushButton('Select Image')
         self.btnLayout.addWidget(self.selectImgBtn)
         self.selectImgBtn.clicked.connect(self.selectImg)
@@ -43,6 +43,14 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
         self.convaiBtn = QtWidgets.QPushButton('Start Talking')
         self.btnLayout.addWidget(self.convaiBtn)
         self.convaiBtn.clicked.connect(self.onConvaiBtnClick)
+
+        self.stopBtnLayout = QtWidgets.QHBoxLayout()
+        self.mainLayout.addLayout(self.stopBtnLayout)
+
+        self.stopSpBtn = QtWidgets.QPushButton('Stop Shakespeare')
+        self.stopBtnLayout.addWidget(self.stopSpBtn)
+        self.stopSpBtn.clicked.connect(self.onStopSpBtnClick)
+        self.stopSpBtn.setEnabled(False)  # Initially disabled
 
     def initImgHolder(self):
         self.imgGb = QtWidgets.QGroupBox('Selected Image')
@@ -88,18 +96,16 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
         else:
             self.convaiBackend.startConvai()
 
+    def onStopSpBtnClick(self):
+        if self.convaiBackend is not None:
+            self.convaiBackend.sendStopSignalToA2F()
+
     def connectEventsToConvai(self):
         self.convaiBackend.updateBtnTextSignal.connect(self.convaiBtn.setText)
         self.convaiBackend.setBtnEnabledSignal.connect(self.convaiBtn.setEnabled) 
         self.convaiBackend.stateChangeSignal.connect(self.handleConvaiStateChange)
-        self.convaiBackend.errorSignal.connect(self.showMsg)        
-
-    def updateConvaiBtn(self, data):
-        try:
-            enabled = bool(data)
-            self.convaiBtn.setEnabled(enabled)
-        except ValueError:
-            self.convaiBtn.setText(data)
+        self.convaiBackend.errorSignal.connect(self.showMsg)
+        self.convaiBackend.isSendingAudSignal.connect(self.updateStopButtonState)
 
     def handleConvaiStateChange(self, isTalking):
         if isTalking:
@@ -107,6 +113,9 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
         else:
             self.convaiBtn.setText("Start Talking")
             self.convaiBtn.setEnabled(True)
+
+    def updateStopButtonState(self, isSendingAudio):
+        self.stopSpBtn.setEnabled(isSendingAudio)
 
     def showMsg(self, msg):
         self.statusBar.showMessage(msg, 50000) 

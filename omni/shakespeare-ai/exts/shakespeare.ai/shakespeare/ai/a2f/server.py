@@ -17,6 +17,7 @@ class A2FClient:
         self.streamThread = None
         self.isStreaming = False
         self.chunkDuration = .3
+        self.stopEvent = threading.Event()
 
     def appendAudData(self, audData, sampleRate):
         with self.lock:
@@ -42,6 +43,7 @@ class A2FClient:
         if self.isStreaming:
             return
         self.isStreaming = True
+        self.stopEvent.clear()
         self.streamThread = threading.Thread(target=self.streamAud)
         self.streamThread.start()
 
@@ -54,7 +56,7 @@ class A2FClient:
             )
             yield audio2face_pb2.PushAudioStreamRequest(start_marker=startMarker)           
 
-            while self.isStreaming:
+            while not self.stopEvent.is_set():
                 with self.lock:
                     chunkSize = int(self.sampleRate * 2 * self.chunkDuration)
                     if len(self.accAud) >= chunkSize:
@@ -70,6 +72,9 @@ class A2FClient:
                 else:
                     time.sleep(.01)
 
+            # Send a final empty chunk to signal the end of the stream
+            yield audio2face_pb2.PushAudioStreamRequest(audio_data=b'')
+
         try:
             response = self.stub.PushAudioStream(generateAudChunks())
             if response.success:
@@ -78,11 +83,24 @@ class A2FClient:
                 print(f"[A2FClient] Error in audio stream: {response.message}")
         except Exception as e:
             print(f"[A2FClient] Error during audio streaming: {e}")
+        finally:
+            self.isStreaming = False
 
     def stopStreaming(self):
-        self.isStreaming = False
+        if not self.isStreaming:
+            return
+
+        print("[A2FClient] Stopping audio stream...")
+        self.stopEvent.set()
+        self.isStreaming = False  
+        
         if self.streamThread:
-            self.streamThread.join()
+            self.streamThread.join(timeout=0)  
+            if self.streamThread.is_alive():
+                print("[A2FClient] Warning: Stream thread did not stop in time")
+        
+        self.accAud.clear()
+        print("[A2FClient] Audio stream stopped")
 
 HOST = 'localhost'
 AUD_PORT = 65432
@@ -107,18 +125,31 @@ def runA2FServer(stopEvent):
     audThread = threading.Thread(target=handleAudioSocket, args=(audSocket, a2fClient, stopEvent))
     cntrlThread = threading.Thread(target=handleCntrlSocket, args=(cntrlSocket, a2fClient, stopEvent))
     
-    audThread.start()
-    cntrlThread.start()
+    try:
+        audThread.start()
+        cntrlThread.start()
 
-    audThread.join()
-    cntrlThread.join()
+        while not stopEvent.is_set():
+            time.sleep(0.1)
 
-    if a2fClient.isStreaming:
-        a2fClient.stopStreaming()
+    except Exception as e:
+        print(f"[Audio2Face Socket Server] Error in main server loop: {e}")
 
-    audSocket.close()
-    cntrlSocket.close()
-    print("[Audio2Face Socket Server] Server stopped.")
+    finally:
+        print("[Audio2Face Socket Server] Stopping server...")
+        
+        if a2fClient.isStreaming:
+            a2fClient.stopStreaming()
+
+        stopEvent.set()
+
+        audThread.join(timeout=-0)
+        cntrlThread.join(timeout=0)
+
+        audSocket.close()
+        cntrlSocket.close()
+
+        print("[Audio2Face Socket Server] Server stopped.")
 
 def handleAudioSocket(audSocket, a2fClient, stopEvent):
     while not stopEvent.is_set():
@@ -156,11 +187,9 @@ def handleCntrlClient(conn, a2fClient, stopEvent):
                 print("[Audio2Face Socket Server] Received stop command")
                 if a2fClient.isStreaming:
                     a2fClient.stopStreaming()
-                    a2fClient = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
+                conn.sendall(b'stopped')
     except Exception as e:
         print(f"[Audio2Face Socket Server] Control client error: {e}")
-    finally:
-        conn.close()
 
 def handleAudClient(conn, a2fClient, stopEvent):
     try:

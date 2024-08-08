@@ -75,7 +75,8 @@ class ConvaiBackend(QObject):
     stateChangeSignal = pyqtSignal(bool)
     errorSignal = pyqtSignal(str)
     updateBtnTextSignal = pyqtSignal(str)  
-    setBtnEnabledSignal = pyqtSignal(bool)  
+    setBtnEnabledSignal = pyqtSignal(bool)
+    isSendingAudSignal = pyqtSignal(bool)
 
     @staticmethod
     def getInstance():
@@ -193,9 +194,7 @@ class ConvaiBackend(QObject):
     def startConvai(self):
         if self.OldCharacterID != self.charId:
             self.OldCharacterID = self.charId
-            self.sessionId = ""
-
-        self.sendStopSignalToA2F()
+            self.sessionId = ""       
 
         self.updateBtnText("Stop")
         self.startMic()
@@ -205,21 +204,33 @@ class ConvaiBackend(QObject):
         if not self.cntrlSocket:
             self.connectCntrlSocket()
 
+        self.isSendingAudSignal.emit(False)
+
     def stopConvai(self):
         self.updateBtnText("Processing...")
         self.setBtnEnabled(False)
-
+        self.isSendingAudSignal.emit(True)
         self.readMicAndSendToGrpc(True)  
-        self.stopMic() 
+        self.stopMic()
 
     def sendStopSignalToA2F(self):
         try:
             if self.cntrlSocket:
                 self.cntrlSocket.sendall(b"stop")
                 log("Sent stop signal to A2F")
+                # Wait for confirmation
+                response = self.cntrlSocket.recv(7)
+                if response == b'stopped':
+                    log("Received confirmation of stop from A2F")
+            if self.audSocket:
+                self.audSocket.close()
+                self.audSocket = None
+                log("Closed audio socket")
+            self.isSendingAudSignal.emit(False)
         except Exception as e:
             log(f"Error sending stop signal to A2F: {e}", 1)
-            self.cntrlSocket = None        
+        finally:
+            self.cntrlSocket = None
 
     def startMic(self):
         if self.isCapturingAudio:
@@ -341,7 +352,6 @@ class ConvaiBackend(QObject):
 
     def setBtnEnabled(self, enabled):
         self.setBtnEnabledSignal.emit(enabled)  
-
 
 class ConvaiGRPCGetResponseProxy:
     def __init__(self, parent: ConvaiBackend):
