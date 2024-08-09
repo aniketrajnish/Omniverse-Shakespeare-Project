@@ -82,6 +82,9 @@ class A2FClient:
     def streamAud(self):
         '''
         Streams audio data to the Audio2Face server in chunks.
+
+        yields:
+            audio2face_pb2.PushAudioStreamRequest: The audio stream request        
         '''
         def generateAudChunks():
             '''
@@ -156,6 +159,9 @@ socketServerSource = 'Audio2Face Socket Server'
 def runA2FServer(stopEvent):
     '''
     Main function to run the Audio2Face socket server.
+
+    Args:
+        stopEvent (threading.Event): The event to stop the server
     '''
     a2fClient = A2FClient('localhost:50051', '/World/LazyGraph/PlayerStreaming')
     
@@ -203,6 +209,11 @@ def runA2FServer(stopEvent):
 def handleCntrlSocket(cntrlSocket, a2fClient, stopEvent):
     '''
     Handles the control socket connection.
+
+    Args:
+        cntrlSocket (socket.socket): The control socket meant for stopping the audio stream
+        a2fClient (A2FClient): The Audio2Face client defined above
+        stopEvent (threading.Event): The event to stop the server
     '''
     while not stopEvent.is_set():
         try:
@@ -219,6 +230,11 @@ def handleCntrlSocket(cntrlSocket, a2fClient, stopEvent):
 def handleAudioSocket(audSocket, a2fClient, stopEvent):
     '''
     Handles the audio socket connection.
+
+    Args:
+        audSocket (socket.socket): The audio socket meant for streaming audio data
+        a2fClient (A2FClient): The Audio2Face client defined above
+        stopEvent (threading.Event): The event to stop the server
     '''
     while not stopEvent.is_set(): # loops until stopEvent is set
         try:
@@ -235,6 +251,11 @@ def handleAudioSocket(audSocket, a2fClient, stopEvent):
 def handleCntrlClient(conn, a2fClient, stopEvent):
     '''
     Handles comms with the control client.
+
+    Args:
+        conn (socket.socket): The control socket connection
+        a2fClient (A2FClient): The Audio2Face client defined above
+        stopEvent (threading.Event): The event to stop the server
     '''
     try:
         while not stopEvent.is_set():
@@ -252,6 +273,11 @@ def handleCntrlClient(conn, a2fClient, stopEvent):
 def handleAudClient(conn, a2fClient, stopEvent):
     '''
     Handles comms with the audio client.
+
+    Args:
+        conn (socket.socket): The audio socket connection
+        a2fClient (A2FClient): The Audio2Face client defined above
+        stopEvent (threading.Event): The event to stop the server
     '''
     try:
         while not stopEvent.is_set():
