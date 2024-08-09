@@ -1,17 +1,39 @@
+# --------------------------------------------------------------------------------------------------
+# Audio2Face Socket Server
+# --------------------------------------------------------------------------------------------------
+
 import grpc, struct, socket, threading, time
 import audio2face_pb2, audio2face_pb2_grpc
 import numpy as np
 from pydub import AudioSegment
 
+def log(text: str, warning: bool = False, source: str = 'A2FClient'):                           
+    print(f"[{source}] {'[Warning]' if warning else ''} {text}") 
+
+# --------------------------------------------------------------------------------------------------
+# Audio2Face Client for streaming audio data recieved from the audio socket server
+# to the streaming audio player in Audio2Face
+# --------------------------------------------------------------------------------------------------
+
 class A2FClient:
+    '''
+    A client for streaming audio data to the Audio2Face server.
+    '''
     def __init__(self, url, instanceName):
+        '''
+        Initializes the client with the given server URL and instance name.
+
+        Args:
+            url (str): The URL of the Audio2Face server
+            instanceName (str): The name of Audio2Face instance to stream audio to
+        '''
         self.url = url
         self.instanceName = instanceName
         self.channel = grpc.insecure_channel(url)
         self.stub = audio2face_pb2_grpc.Audio2FaceStub(self.channel)
         self.channels = 1
         self.sampleWidth = 2 
-        self.accAud = bytearray()
+        self.accAud = bytearray() # using bytearray to avoid memory fragmentation
         self.sampleRate = None
         self.lock = threading.Lock()
         self.streamThread = None
@@ -20,11 +42,18 @@ class A2FClient:
         self.stopEvent = threading.Event()
 
     def appendAudData(self, audData, sampleRate):
+        '''
+        Appends audio data to the accumulated audio buffer and starts streaming if not already streaming.
+
+        Args:
+            audData (bytes): The audio data to append
+            sampleRate (int): The sample rate of the audio data, 44100 Hz in our case
+        '''
         with self.lock:
             if self.sampleRate is None:
                 self.sampleRate = sampleRate
             elif self.sampleRate != sampleRate:
-                print(f"[A2FClient] Warning: Sample rate changed from {self.sampleRate} to {sampleRate}")
+                log(f'Sample rate changed from {self.sampleRate} to {sampleRate}', warning=True)
                 self.sampleRate = sampleRate
 
             audSegment = AudioSegment(
@@ -33,14 +62,17 @@ class A2FClient:
                 frame_rate=sampleRate,
                 channels=self.channels
             )
-            audSegment = audSegment.fade_in(25).fade_out(25)
-            self.accAud += audSegment.raw_data            
+            audSegment = audSegment.fade_in(25).fade_out(25) # fade in and out 
+            self.accAud += audSegment.raw_data               # to avoid clicks between chunks
 
         if not self.isStreaming:
             self.startStreaming()
 
     def startStreaming(self):
-        if self.isStreaming:
+        '''
+        Starts the audio streaming thread.        
+        '''
+        if self.isStreaming: 
             return
         self.isStreaming = True
         self.stopEvent.clear()
@@ -48,7 +80,13 @@ class A2FClient:
         self.streamThread.start()
 
     def streamAud(self):
+        '''
+        Streams audio data to the Audio2Face server in chunks.
+        '''
         def generateAudChunks():
+            '''
+            To yield audio chunks to the server.            
+            '''
             startMarker = audio2face_pb2.PushAudioRequestStart(
                 samplerate=self.sampleRate,
                 instance_name=self.instanceName,
@@ -58,9 +96,9 @@ class A2FClient:
 
             while not self.stopEvent.is_set():
                 with self.lock:
-                    chunkSize = int(self.sampleRate * 2 * self.chunkDuration)
+                    chunkSize = int(self.sampleRate * 2 * self.chunkDuration) # 2 bytes per sample
                     if len(self.accAud) >= chunkSize:
-                        audChunk = self.accAud[:chunkSize]
+                        audChunk = self.accAud[:chunkSize] 
                         self.accAud = self.accAud[chunkSize:]
                     else:
                         audChunk = None
@@ -72,55 +110,66 @@ class A2FClient:
                 else:
                     time.sleep(.01)
 
-            # Send a final empty chunk to signal the end of the stream
-            yield audio2face_pb2.PushAudioStreamRequest(audio_data=b'')
+            yield audio2face_pb2.PushAudioStreamRequest(audio_data=b'') # end marker
 
         try:
             response = self.stub.PushAudioStream(generateAudChunks())
             if response.success:
-                print("[A2FClient] Audio stream completed successfully")
+                log('Audio stream completed successfully')
             else:
-                print(f"[A2FClient] Error in audio stream: {response.message}")
+                log(f'Error in audio stream: {response.message}', warning=True)
         except Exception as e:
-            print(f"[A2FClient] Error during audio streaming: {e}")
+            log(f'Error during audio streaming: {e}', warning=True)
         finally:
             self.isStreaming = False
 
     def stopStreaming(self):
+        '''
+        Stops the audio streaming thread and clears the accumulated audio buffer.
+        '''
         if not self.isStreaming:
             return
 
-        print("[A2FClient] Stopping audio stream...")
+        log('Stopping audio stream...')
         self.stopEvent.set()
         self.isStreaming = False  
         
         if self.streamThread:
             self.streamThread.join(timeout=0)  
             if self.streamThread.is_alive():
-                print("[A2FClient] Warning: Stream thread did not stop in time")
+                log('Stream thread did not stop in time', warning=True)
         
         self.accAud.clear()
-        print("[A2FClient] Audio stream stopped")
+        log('Audio stream stopped')
+
+# --------------------------------------------------------------------------------------------------
+# Main function calls for the Audio2Face socket server
+# --------------------------------------------------------------------------------------------------
 
 HOST = 'localhost'
-AUD_PORT = 65432
-CNTRL_PORT = 65433
+AUD_PORT = 65432 # audio socket port from the backend
+CNTRL_PORT = 65433 # control socket port from the backend
 BUFFER_SIZE = 4194304  # 4MB
 
+socketServerSource = 'Audio2Face Socket Server'
+
 def runA2FServer(stopEvent):
-    a2fClient = A2FClient("localhost:50051", "/World/LazyGraph/PlayerStreaming")
+    '''
+    Main function to run the Audio2Face socket server.
+    '''
+    a2fClient = A2FClient('localhost:50051', '/World/LazyGraph/PlayerStreaming')
     
     audSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     audSocket.bind((HOST, AUD_PORT))
     audSocket.listen(1)
     audSocket.settimeout(1)
-    print(f"[Audio2Face Socket Server] Waiting for an audio connection on {HOST}:{AUD_PORT}")
+    log(f'Waiting for an audio connection on {HOST}:{AUD_PORT}', source=socketServerSource)
 
     cntrlSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     cntrlSocket.bind((HOST, CNTRL_PORT))
     cntrlSocket.listen(1)
     cntrlSocket.settimeout(1)
-    print(f"[Audio2Face Socket Server] Waiting for a control connection on {HOST}:{CNTRL_PORT}")
+    log(f'Waiting for a control connection on {HOST}:{CNTRL_PORT}', source=socketServerSource)
 
     audThread = threading.Thread(target=handleAudioSocket, args=(audSocket, a2fClient, stopEvent))
     cntrlThread = threading.Thread(target=handleCntrlSocket, args=(cntrlSocket, a2fClient, stopEvent))
@@ -133,10 +182,10 @@ def runA2FServer(stopEvent):
             time.sleep(0.1)
 
     except Exception as e:
-        print(f"[Audio2Face Socket Server] Error in main server loop: {e}")
+        log(f'Error in main server loop: {e}', warning=True, source=socketServerSource)
 
     finally:
-        print("[Audio2Face Socket Server] Stopping server...")
+        log('Stopping server...', source=socketServerSource)
         
         if a2fClient.isStreaming:
             a2fClient.stopStreaming()
@@ -149,93 +198,111 @@ def runA2FServer(stopEvent):
         audSocket.close()
         cntrlSocket.close()
 
-        print("[Audio2Face Socket Server] Server stopped.")
-
-def handleAudioSocket(audSocket, a2fClient, stopEvent):
-    while not stopEvent.is_set():
-        try:
-            conn, addr = audSocket.accept()
-            print(f"[Audio2Face Socket Server] Audio connection established with {addr}")
-            clientThread = threading.Thread(target=handleAudClient, args=(conn, a2fClient, stopEvent))
-            clientThread.start()
-        except socket.timeout:
-            continue
-        except Exception as e:
-            print(f"[Audio2Face Socket Server] Audio socket error: {e}")
-            break
+        log('Server stopped', source=socketServerSource)
 
 def handleCntrlSocket(cntrlSocket, a2fClient, stopEvent):
+    '''
+    Handles the control socket connection.
+    '''
     while not stopEvent.is_set():
         try:
             conn, addr = cntrlSocket.accept()
-            print(f"[Audio2Face Socket Server] Control connection established with {addr}")
+            log(f'Control connection established with {addr}', source=socketServerSource)
             cntrlThread = threading.Thread(target=handleCntrlClient, args=(conn, a2fClient, stopEvent))
             cntrlThread.start()
         except socket.timeout:
             continue
         except Exception as e:
-            print(f"[Audio2Face Socket Server] Control socket error: {e}")
+            log(f'Control socket error: {e}', warning=True, source=socketServerSource)
+            break
+
+def handleAudioSocket(audSocket, a2fClient, stopEvent):
+    '''
+    Handles the audio socket connection.
+    '''
+    while not stopEvent.is_set(): # loops until stopEvent is set
+        try:
+            conn, addr = audSocket.accept()
+            log(f'Audio connection established with {addr}', source=socketServerSource)
+            clientThread = threading.Thread(target=handleAudClient, args=(conn, a2fClient, stopEvent))
+            clientThread.start()
+        except socket.timeout:
+            continue
+        except Exception as e:
+            log(f'Audio socket error: {e}', warning=True, source=socketServerSource)
             break
 
 def handleCntrlClient(conn, a2fClient, stopEvent):
+    '''
+    Handles comms with the control client.
+    '''
     try:
         while not stopEvent.is_set():
             data = conn.recv(4)
             if not data:
                 break
-            if data == b'stop':
-                print("[Audio2Face Socket Server] Received stop command")
+            if data == b'stop': # hax
+                log('Received stop command', source=socketServerSource)
                 if a2fClient.isStreaming:
                     a2fClient.stopStreaming()
-                conn.sendall(b'stopped')
+                conn.sendall(b'stopped') 
     except Exception as e:
-        print(f"[Audio2Face Socket Server] Control client error: {e}")
+        log(f'Control client error: {e}', warning=True, source=socketServerSource)
 
 def handleAudClient(conn, a2fClient, stopEvent):
+    '''
+    Handles comms with the audio client.
+    '''
     try:
         while not stopEvent.is_set():
-            msgLenData = conn.recv(4)
+            msgLenData = conn.recv(4) # read message length
             if not msgLenData:
-                print("[Audio2Face Socket Server] Client disconnected.")
+                log('Client disconnected', source=socketServerSource)
                 break
-            msgLen = struct.unpack('>i', msgLenData)[0]
+            msgLen = struct.unpack('>i', msgLenData)[0] # using struct to unpack bytes to int
 
-            print(f"[Audio2Face Socket Server] Receiving message of length: {msgLen}")
+            log(f'Receiving message of length: {msgLen}', source=socketServerSource)
 
             data = bytearray()
             bytesRec = 0
             while bytesRec < msgLen:
-                chunk = conn.recv(min(BUFFER_SIZE, msgLen - bytesRec))
+                chunk = conn.recv(min(BUFFER_SIZE, msgLen - bytesRec)) # read data in chunks
                 if not chunk:
-                    print("[Audio2Face Socket Server] Connection closed before receiving complete message.")
+                    log('Connection closed before receiving complete message', source=socketServerSource)
                     return
                 data.extend(chunk)
                 bytesRec += len(chunk)
 
             if bytesRec != msgLen:
-                print(f"[Audio2Face Socket Server] Received incomplete message! Expected {msgLen} bytes, got {bytesRec}.")
+                log(f'Received incomplete message! Expected {msgLen} bytes, got {bytesRec}', warning=True, source=socketServerSource)
                 continue
 
-            srBytes, audData = data.split(b'|', 1)
+            srBytes, audData = data.split(b'|', 1) # split audio data from sample rate
             sr = struct.unpack('>i', srBytes)[0]
 
-            print(f"[Audio2Face Socket Server] Received audio data: length={len(audData)}, sr={sr}")
+            log(f'Received audio data: length={len(audData)}, sr={sr}', source=socketServerSource)
 
             a2fClient.appendAudData(audData, sr)
 
     except Exception as e:
-        print(f"[Audio2Face Socket Server] Error receiving audio data: {e}")
+        log(f'Error receiving audio data: {e}', warning=True, source=socketServerSource)
     finally:
         conn.close()
 
 def startA2FServer():
+    '''
+    Meant to start the Audio2Face server in a separate thread.
+    '''
     stopEvent = threading.Event()
     serverThread = threading.Thread(target=runA2FServer, args=(stopEvent,))
     serverThread.start()
     return stopEvent, serverThread
 
 def stopA2FServer(stopEvent, serverThread):
+    '''
+    Stops the Audio2Face server.
+    '''
     stopEvent.set()
     serverThread.join(timeout=5) 
     if serverThread.is_alive():
-        print("[Audio2Face Socket Server] Server thread did not stop in time. Forcing shutdown.")
+        log('Server thread did not stop in time. Forcing shutdown.', warning=True, source=socketServerSource)
