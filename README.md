@@ -17,16 +17,17 @@ graph TD
     L --> M[Audio processed with pydub]
     M --> N[Processed audio sent to A2F socket server]
     N --> O[Audio added to queue using threading.Condition]
-    O --> P[Audio sent in chunks to A2F streaming audio player]
-    P --> Q[A2F streaming audio player processes audio]
-    Q --> R[Audio converted to blendshapes for facial animation]
-    R --> S[Auto emotions enabled based on audio]
-    S --> T[DLSS used for frame generation]
-    T --> U[Animated Shakespeare character displayed]
-    U --> V[Conversation continues]
-    V --> K
-    V --> W[User ends conversation]
-    W --> X[Cleanup and disconnect]
+    O --> P[pydub removes clicks between chunks]
+    P --> Q[Audio sent in chunks to A2F streaming audio player]
+    Q --> R[A2F streaming audio player processes audio]
+    R --> S[Audio converted to blendshapes for facial animation]
+    S --> T[Auto emotions enabled based on audio]
+    T --> U[DLSS used for frame generation]
+    U --> V[Animated Shakespeare character displayed]
+    V --> W[Conversation continues]
+    W --> K
+    W --> X[User ends conversation]
+    X --> Y[Cleanup and disconnect]
 
     subgraph Omniverse[Omniverse Extension]
         A
@@ -63,8 +64,8 @@ graph TD
     end
 
     subgraph A2F[Audio2Face Integration]
-        P[A2F streaming audio player]
-        Q[pydub removes clicks<br>between chunks]
+        P[pydub removes clicks<br>between chunks]
+        Q[A2F streaming audio player]
         R
         S
         T
