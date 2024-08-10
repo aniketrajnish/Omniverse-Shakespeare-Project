@@ -3,7 +3,7 @@
 version = "1.0.0"
 
 # Lists people or organizations that are considered the "authors" of the package.
-authors = ["NVIDIA"]
+authors = ["Aniket Rajnish"]
 
 # The title and description fields are primarily for displaying extension info in UI
 title = "Shakespeare AI Server" 

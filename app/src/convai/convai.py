@@ -3,8 +3,8 @@
 # Also handles the connection to the A2F server
 # We're using sockects to communicate as the protobuf & gRPC versions,
 # are different between backend and A2F & the implementation is incompatible.
-# The backend uses grpcio==1.65.1 and protobuf==4.21.10
-# A2F uses grpcio==1.51.3 and protobuf==3.17.3
+# Backend uses grpcio==1.65.1 & protobuf==4.21.10 due to requirements of Convai
+# A2F uses grpcio==1.51.3 & protobuf==3.17.3
 # ------------------------------------------------------------------------------
 
 import os, configparser, pyaudio, grpc, requests, json, threading, time
