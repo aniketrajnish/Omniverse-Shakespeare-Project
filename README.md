@@ -13,7 +13,9 @@ graph TD
     I --> J[Update Shakespeare context in Convai API]
     H -->|No| K[User initiates conversation]
     J --> K
-    K --> L[Convai generates audio response via gRPC]
+    K --> KA[Mic input captured using PyAudio]
+    KA --> KB[Audio sent to Convai server]
+    KB --> L[Convai generates audio response via gRPC]
     L --> M[Audio processed with pydub]
     M --> N[Processed audio sent to A2F socket server]
     N --> O[Audio added to queue using threading.Condition]
@@ -54,6 +56,8 @@ graph TD
 
     subgraph Convai[Convai Integration]
         K
+        KA[Mic input captured<br>using PyAudio]
+        KB[Data to<br>Convai server]
         L[gRPC v1.65.1<br>protobuf v4.21.10]
     end
 
