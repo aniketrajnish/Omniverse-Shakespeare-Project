@@ -45,35 +45,6 @@ A immersive experience allowing for real-time conversation with the digital twin
 - You can either select an image to show to Shakespeare or start talking directly.
 
 ## How it works
-
-- **Project Initialization:**
-    - The user opens the project from the Omniverse extension.
-    - The project loads in Audio2Face.
-- **Server Connection:**
-    - The user connects to the socket server from the extension.
-    - This action starts a socket server and opens a compiled PyQt5 executable.
-- **User Interaction:**
-    - Users can choose to select an image or start talking directly.
-    - If an image is selected, it's sent to the `Gemini` API for analysis.
-    - The context generated is updated in the `Convai` API to update the conversation context.
-- **Conversation Flow:**
-    - Microphone input is captured using `PyAudio`.
-    - User speech is sent to the `Convai` service via `gRPC`.
-    - The response is generated in shakespearean style and sent back.
-- **Audio Processing:**
-    - The audio response is processed using the `pydub` library.
-    - Processed audio is sent to the Audio2Face socket server in chunks.
-    - The audio is added to a queue using `threading.Condition`.
-    - Clicks between audio chunks are also removed using `pydub`.
-- **Facial Animation & Display:**
-    - Audio is sent in chunks to the `Audio2Face` streaming audio player
-    - The audio is processed and converted to blendshapes for facial animation.
-    - Auto emotions are enabled based on the audio.
-    - `DLSS` is used for frame generation to optimize performance.
-    - The animated Shakespeare character is displayed, speaking the generated response.
-- **Conversation Loop:**
-    - The conversation continues until the user ends it.
-    - At the end, the system cleans up and disconnects.
 ```mermaid
 graph TD
     A[User opens project from Omniverse extension] --> B[Project loads in Audio2Face]
@@ -155,6 +126,34 @@ graph TD
     Convai --> Audio
     Audio --> A2F
 ```
+- **Project Initialization:**
+    - The user opens the project from the Omniverse extension.
+    - The project loads in Audio2Face.
+- **Server Connection:**
+    - The user connects to the socket server from the extension.
+    - This action starts a socket server and opens a compiled PyQt5 executable.
+- **User Interaction:**
+    - Users can choose to select an image or start talking directly.
+    - If an image is selected, it's sent to the `Gemini` API for analysis.
+    - The context generated is updated in the `Convai` API to update the conversation context.
+- **Conversation Flow:**
+    - Microphone input is captured using `PyAudio`.
+    - User speech is sent to the `Convai` service via `gRPC`.
+    - The response is generated in shakespearean style and sent back.
+- **Audio Processing:**
+    - The audio response is processed using the `pydub` library.
+    - Processed audio is sent to the Audio2Face socket server in chunks.
+    - The audio is added to a queue using `threading.Condition`.
+    - Clicks between audio chunks are also removed using `pydub`.
+- **Facial Animation & Display:**
+    - Audio is sent in chunks to the `Audio2Face` streaming audio player
+    - The audio is processed and converted to blendshapes for facial animation.
+    - Auto emotions are enabled based on the audio.
+    - `DLSS` is used for frame generation to optimize performance.
+    - The animated Shakespeare character is displayed, speaking the generated response.
+- **Conversation Loop:**
+    - The conversation continues until the user ends it.
+    - At the end, the system cleans up and disconnects.
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change. Currently working on-
