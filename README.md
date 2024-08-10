@@ -36,8 +36,11 @@ A immersive experience allowing for real-time conversation with the digital twin
         - Get your `Gemini` API key from [here](https://ai.google.dev/gemini-api/docs/api-key), paste it in `app\src\gemini\gemini.env` next to `API_KEY`.
         - Get your `Convai` API key from [here](https://docs.convai.com/api-docs/convai-playground/get-started), paste it in `app\src\convai\convai.env` next to `API_KEY`.
 
+- To optimize for performance, you can enable `DLSS` in Audio2Face by going to `RTX - Real-Time > Settings Hambuger Icon > NVIDIA DLSS > check Frame Generation`. You need to do this every time you open `Audio2Face`.
+
 ## Usage
-- Open `Audio2Face` and enable the extension from `Window > Extensions > Third-Party > Shakespeare AI Server`.
+- Enable the extension from `Window > Extensions > Third-Party > Shakespeare AI Server`.
+- If this is the first time you're using Audio2Face, it will take some time to load the `TensorRT` engine. You can check the progress in the `Audio2Face Tool` window.
 - The extension will open a window with two buttons: `Open Project` and `Connect to Server`.
 - Click on `Open Project` to load the project in Audio2Face having the Shakespeare character along with streaming audio player set up.
 - Click on `Connect to Server` to start the server and open the PyQt5 executable.
