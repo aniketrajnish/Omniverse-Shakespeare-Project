@@ -13,14 +13,14 @@ A immersive experience allowing for real-time conversation with the digital twin
 
 - After installing ominverse, you can choose to set up the project in one of the two ways:
 
-    1. **Load Manually**
+    - **Load Manually**
         - Clone the repository:
             ```
             git clone https://github.com/yourusername/shakespeare-ai.git
             ```
         - Open Audio2Face go to ` Window > Extensions > Hamburger Menu Icon > Settings` and add the path to the `exts` folder in the repository.
 
-    2. **Load directly from GitHub**
+    - **Load directly from GitHub**
         - Make sure you have `git` installed on your system.
         - Open Audio2Face go to ` Window > Extensions > Hamburger Menu Icon > Settings` and add `git://github.com/aniketrajnish/Omniverse-Shakespeare-Project?branch=main&dir=omni/shakespeare-ai/exts`.
         - In case the above method doesn't work, follow the manual method.
