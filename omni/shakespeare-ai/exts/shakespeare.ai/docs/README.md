@@ -7,3 +7,6 @@ The project leverages:
 - Gemini API for image analysis and context generation. We're using the gemini-1.5-turbo model.
 - Convai API for real-time conversation. We're using voices from ElevenLabs to generate natural-sounding speech.
 - NVIDIA Omniverse's Audio2Face for facial animation as well as DLSS for frame generation to optimize performance.
+
+## Thanks
+- Aamir Vora - Facial artist for Shakespeare [ [LinkedIn](https://www.linkedin.com/in/aamir-vora-244013201/) | [ArtStation](https://aamirvora251299.artstation.com/) ]

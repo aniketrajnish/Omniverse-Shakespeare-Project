@@ -118,3 +118,6 @@ graph TD
 - **Conversation Loop:**
     - The conversation continues until the user ends it.
     - At the end, the system cleans up and disconnects.
+
+## Thanks
+- Aamir Vora - Facial artist for Shakespeare [ [LinkedIn](https://www.linkedin.com/in/aamir-vora-244013201/) | [ArtStation](https://aamirvora251299.artstation.com/) ]
