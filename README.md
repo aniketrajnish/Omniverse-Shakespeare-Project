@@ -1,6 +1,6 @@
 # Shakespeare AI : Vision + Realtime conversation + Facial Animation
 
-## How it wroks
+## How it works
 ```mermaid
 graph TD
     A[User opens project from Omniverse extension] --> B[Project loads in Audio2Face]
