@@ -40,7 +40,7 @@ class LocalAudioPlayer:
                     playback.play(self.currentAudio)
                     self.currentAudio = None
                 
-            except Queue.Empty:
+            except Queue.empty:
                 continue
             except Exception as e:
                 print(f"Error playing audio: {e}")
