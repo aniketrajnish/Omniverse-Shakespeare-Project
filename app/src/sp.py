@@ -151,13 +151,9 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
         Stops the conversation with Shakespeare.
         '''
         if self.convaiBackend is not None:
-            self.convaiBackend.sendStopSignalToA2F()
+            self.convaiBackend.stopShakespeare()
 
     def connectEventsToConvai(self):
-        '''
-        Connects the signals from the convai backend to the UI.
-        This is done to update the UI based on the backend's state.
-        '''
         self.convaiBackend.updateBtnTextSignal.connect(self.convaiBtn.setText)
         self.convaiBackend.setBtnEnabledSignal.connect(self.convaiBtn.setEnabled) 
         self.convaiBackend.stateChangeSignal.connect(self.handleConvaiStateChange)
@@ -165,19 +161,12 @@ class ShakespeareWindow(QtWidgets.QMainWindow):
         self.convaiBackend.isSendingAudSignal.connect(self.updateStopButtonState)
 
     def handleConvaiStateChange(self, isTalking):
-        '''
-        Handles changes in convai conversation state.
-        '''
         if isTalking:
             self.statusBar.showMessage('Shakespeare started speaking!', 5000)
         else:
-            self.convaiBtn.setText('Start Talking')
-            self.convaiBtn.setEnabled(True)
+            self.statusBar.showMessage('Shakespeare stopped speaking', 5000)
 
     def updateStopButtonState(self, isSendingAudio):
-        '''
-        Updates the state of the stop button based on if audio is being sent.
-        '''
         self.stopSpBtn.setEnabled(isSendingAudio)
 
     def showMsg(self, msg):

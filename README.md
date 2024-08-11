@@ -47,6 +47,9 @@ A immersive experience allowing for real-time conversation with the digital twin
 - The executable will connect to the server and you can start interacting with the Shakespeare character.
 - You can either select an image to show to Shakespeare or start talking directly.
 
+> [!CAUTION]
+> You can directly run the executable from `app/build` folder without having to install `Omniverse` to get a feel of the real-time conversation as well as vision capabilities minus the facial animation and visual experience. **But it will likely run into threading issues as the `Audio2Face` streaming audio player is not available.**
+
 ## How it works
 ```mermaid
 graph TD
