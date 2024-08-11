@@ -178,6 +178,21 @@ class ConvaiBackend(QObject):
         self.uiLock = threading.Lock()
         self.micLock = threading.Lock()    
 
+        self.isA2fConnected = self.checkA2FConnection()
+
+    def checkA2FConnection(self):
+        '''
+        Checks if the A2F server is running and can be connected to.
+        '''
+        try:
+            self.connectToA2F()
+            self.connectCntrlSocket()
+            log('A2F connection successful')
+            return True
+        except Exception as e:
+            log(f'Failed to connect to A2F: {e}', 1)
+            return False
+
     def connectToA2F(self):
         '''
         Connects to the Audio2Face server's audio socket.
@@ -298,7 +313,9 @@ class ConvaiBackend(QObject):
                 log(f'Failed to connect control socket: {e}', 1)
 
         self.isSendingAudSignal.emit(False)
-        self.localAudPlayer.stop()
+
+        # if not self.isA2fConnected:
+        #     self.localAudPlayer.stop()
 
     def stopConvai(self):
         '''
@@ -309,8 +326,8 @@ class ConvaiBackend(QObject):
         self.isSendingAudSignal.emit(True)
         self.readMicAndSendToGrpc(True)  
         self.stopMic()
-        if not self.audSocket:
-            self.localAudPlayer.stop()
+        # if not self.isA2fConnected:
+        #     self.localAudPlayer.stop()
 
     def stopShakespeare(self):
         '''
@@ -323,7 +340,8 @@ class ConvaiBackend(QObject):
         Starts the stop shakespeare method in a separate thread.
         '''
         try:
-            self.localAudPlayer.stop()
+            if not self.isA2fConnected:
+                self.localAudPlayer.stop()
             if self.cntrlSocket:
                 self.cntrlSocket.sendall(b'stop')
                 log('Sent stop signal to A2F')
@@ -405,8 +423,8 @@ class ConvaiBackend(QObject):
                     print(f'Added audio chunk to queue. Queue size: {len(self.audQueue)}')
                     self.audQueueCondition.notify()
                 print(f'Processed audio: length={len(segment)}, channels={segment.channels}, sample_width={segment.sample_width}, frame_rate={segment.frame_rate}')
-            else:
-                log('A2F connection not established. Playing audio locally.')
+            elif not self.isA2fConnected:
+                log('A2F connection not established. Playing audio locally.')                
                 self.localAudPlayer.appendToStream(receivedAudio)
         
         except Exception as e:
