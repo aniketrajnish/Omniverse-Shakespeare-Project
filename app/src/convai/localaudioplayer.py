@@ -1,46 +1,46 @@
-from pydub import AudioSegment
-from pydub.playback import play as pydub_play
-import io
 import threading
+from queue import Queue
+from pydub import AudioSegment, playback
+from io import BytesIO
 
 class LocalAudioPlayer:
     def __init__(self):
-        self.audSegment = None
+        self.audioQueue = Queue()
+        self.playThread = None
         self.isPlaying = False
-        self.playbackThread = None
-    
-    def appendToStream(self, data: bytes):
-        segment = AudioSegment.from_wav(io.BytesIO(data)).fade_in(25).fade_out(25)
-        if self.audSegment is None:
-            self.audSegment = segment
-        else:
-            self.audSegment = self.audSegment + segment
-        self.play()
+        self.currentAudio = None
 
-    def play(self):    
-        if self.isPlaying:
-            return
-        print("LocalAudioPlayer - Started playing")
-        self.isPlaying = True
-        if self.playbackThread is None or not self.playbackThread.is_alive():
-            self.playbackThread = threading.Thread(target=self._play_audio)
-            self.playbackThread.start()
+    def start(self):
+        if not self.playThread or not self.playThread.is_alive():
+            self.isPlaying = True
+            self.playThread = threading.Thread(target=self._playAudioLoop)
+            self.playThread.daemon = True
+            self.playThread.start()
 
-    def _play_audio(self):
-        while self.isPlaying and self.audSegment:
-            segment_to_play = self.audSegment
-            self.audSegment = None
-            pydub_play(segment_to_play)
-            if not self.audSegment:
-                self.isPlaying = False
-                print("LocalAudioPlayer - Stopped playing")
+    def addAudio(self, audioData: bytes, sampleRate: int):
+        audio = AudioSegment(
+            audioData,
+            sample_width=2,
+            channels=1,
+            frame_rate=sampleRate
+        )
+        audio = audio.fade_in(25).fade_out(25)
+        self.audioQueue.put(audio)
+        
+        if not self.isPlaying:
+            self.start()
 
-    def pause(self):
-        self.isPlaying = False
-    
-    def stop(self):
-        self.isPlaying = False
-        self.audSegment = None
-        if self.playbackThread:
-            self.playbackThread.join()
-        self.playbackThread = None
+    def _playAudioLoop(self):
+        while self.isPlaying:
+            try:
+                if self.currentAudio is None:
+                    self.currentAudio = self.audioQueue.get(timeout=1)
+                
+                if self.currentAudio:
+                    playback.play(self.currentAudio)
+                    self.currentAudio = None
+                
+            except Queue.Empty:
+                continue
+            except Exception as e:
+                print(f"Error playing audio: {e}")

@@ -54,7 +54,7 @@ def loadConvaiConfig():
     except configparser.NoOptionError as e:
         raise KeyError(f'Missing configuration key in convai.env: {e}')
     except Exception as e:
-        print(f"An error occurred while loading the Convai configuration: {e}")
+        log(f"An error occurred while loading the Convai configuration: {e}", warning=True)
         return {}
 
     return convaiConfig
@@ -84,7 +84,7 @@ def updateCharBackstory(newBackstory):
         else:
             log(f'Failed to update character: {response.status_code} - {response.text}')
     except Exception as e:
-        print(f"An error occurred while updating the character backstory: {e}")
+        log(f"An error occurred while updating the character backstory: {e}", warning=True)
 
 def appendToCharBackstory(backstoryUpdate):
     '''
@@ -101,7 +101,7 @@ def appendToCharBackstory(backstoryUpdate):
             newBackstory = f'{currBackstory}\n{backstoryUpdate}'
             updateCharBackstory(newBackstory)
     except Exception as e:
-        print(f"An error occurred while appending to the character backstory: {e}")
+        log(f"An error occurred while appending to the character backstory: {e}", warning=True)
 
 # ------------------------------------------------------------------------------------
 # ConvaiBackend class is a singleton class that derives from PyQt5.QtCore.QObject.
@@ -151,7 +151,7 @@ class ConvaiBackend(QObject):
         '''
         Initializes the class variables.
         '''
-        self.localAudPlayer = LocalAudioPlayer()
+        self.localAudPlayer = None
 
         self.audQueue = deque(maxlen=4096 * 8)
         self.audSocket = None
@@ -180,6 +180,21 @@ class ConvaiBackend(QObject):
 
         self.isA2fConnected = self.checkA2FConnection()
 
+    def initLocalAudPlayer(self):
+        '''
+        Initializes the LocalAudioPlayer object.
+        '''
+        if not self.localAudPlayer:
+            self.localAudPlayer = LocalAudioPlayer()
+    
+    def destroyLocalAudPlayer(self):
+        '''
+        Destroys the LocalAudioPlayer object.
+        '''
+        if self.localAudPlayer:
+            self.localAudPlayer.isPlaying = False
+            self.localAudPlayer = None
+
     def checkA2FConnection(self):
         '''
         Checks if the A2F server is running and can be connected to.
@@ -188,6 +203,7 @@ class ConvaiBackend(QObject):
             self.connectToA2F()
             self.connectCntrlSocket()
             log('A2F connection successful')
+            self.initLocalAudPlayer()
             return True
         except Exception as e:
             log(f'Failed to connect to A2F: {e}', 1)
@@ -231,7 +247,7 @@ class ConvaiBackend(QObject):
             try:
                 with self.audQueueCondition:
                     while not self.audQueue:
-                        print('[Convai - audioSocketLoop] Waiting for audio data...')
+                        log('Waiting for audio data...')
                         self.audQueueCondition.wait()
 
                     while self.audQueue:
@@ -239,9 +255,9 @@ class ConvaiBackend(QObject):
                         message = pack('>i', sampleRate) + b'|' + wavData
                         message_length = len(message)
                         
-                        print(f'[Convai] Sending message length: {message_length}')
+                        log(f'Sending message length: {message_length}')
                         self.audSocket.sendall(pack('>i', message_length) + message)
-                        print('[Convai] Audio chunk sent')
+                        log('Audio chunk sent')
 
             except Exception as e:
                 log(f'Error sending audio data: {e}', 1)
@@ -286,10 +302,7 @@ class ConvaiBackend(QObject):
     def startConvai(self):
         if self.OldCharacterID != self.charId:
             self.OldCharacterID = self.charId
-            self.sessionId = ''       
-
-        self.updateBtnText('Stop')
-        self.isSendingAudSignal.emit(True)
+            self.sessionId = ''    
 
         threading.Thread(target=self.startConvaiThread, daemon=True).start()        
 
@@ -297,6 +310,9 @@ class ConvaiBackend(QObject):
         '''
         Starts the Convai conversation in a separate thread.
         '''
+        self.updateBtnText('Stop')
+        self.initLocalAudPlayer()
+        
         self.startMic()
         self.convaiGRPCGetResponseProxy = ConvaiGRPCGetResponseProxy(self)
         
@@ -312,10 +328,7 @@ class ConvaiBackend(QObject):
             except Exception as e:
                 log(f'Failed to connect control socket: {e}', 1)
 
-        self.isSendingAudSignal.emit(False)
-
-        # if not self.isA2fConnected:
-        #     self.localAudPlayer.stop()
+        
 
     def stopConvai(self):
         '''
@@ -325,23 +338,24 @@ class ConvaiBackend(QObject):
         self.setBtnEnabled(False)
         self.isSendingAudSignal.emit(True)
         self.readMicAndSendToGrpc(True)  
-        self.stopMic()
-        # if not self.isA2fConnected:
-        #     self.localAudPlayer.stop()
+        self.stopMic()        
 
     def stopShakespeare(self):
         '''
         Sends a stop signal to the A2F server through the control socket.
         '''
-        threading.Thread(target=self.stopShakespeareThread, daemon=True).start()
+        if self.isA2fConnected:
+            threading.Thread(target=self.stopShakespeareThreadA2F, daemon=True).start()
+        else:
+            log('A2F connection not established. Stopping audio locally.')
+            self.destroyLocalAudPlayer()
+            self.isSendingAudSignal.emit(False)   
 
-    def stopShakespeareThread(self):
+    def stopShakespeareThreadA2F(self):
         '''
-        Starts the stop shakespeare method in a separate thread.
+        Starts the stop shakespeare method in a separate thread for A2F.
         '''
         try:
-            if not self.isA2fConnected:
-                self.localAudPlayer.stop()
             if self.cntrlSocket:
                 self.cntrlSocket.sendall(b'stop')
                 log('Sent stop signal to A2F')
@@ -410,7 +424,7 @@ class ConvaiBackend(QObject):
         Streams to A2F if connected, otherwise plays locally using LocalAudioPlayer.
         '''
         try:
-            print(f'Received audio data: length={len(receivedAudio)}, sample_rate={SampleRate}')
+            log(f'Received audio data: length={len(receivedAudio)}, sample_rate={SampleRate}')
             if self.audSocket:
                 segment = AudioSegment.from_wav(BytesIO(receivedAudio)).fade_in(10).fade_out(10)
                 
@@ -420,12 +434,13 @@ class ConvaiBackend(QObject):
                 
                 with self.audQueueCondition:
                     self.audQueue.append((wavData, SampleRate))
-                    print(f'Added audio chunk to queue. Queue size: {len(self.audQueue)}')
+                    log(f'Added audio chunk to queue. Queue size: {len(self.audQueue)}')
                     self.audQueueCondition.notify()
-                print(f'Processed audio: length={len(segment)}, channels={segment.channels}, sample_width={segment.sample_width}, frame_rate={segment.frame_rate}')
+                log(f'Processed audio: length={len(segment)}, channels={segment.channels}, sample_width={segment.sample_width}, frame_rate={segment.frame_rate}')
             elif not self.isA2fConnected:
-                log('A2F connection not established. Playing audio locally.')                
-                self.localAudPlayer.appendToStream(receivedAudio)
+                log('A2F connection not established. Playing audio locally.')
+                if self.localAudPlayer:                            
+                    self.localAudPlayer.addAudio(receivedAudio, SampleRate)
         
         except Exception as e:
             log(f'Error in onDataReceived: {e}', 1)  
@@ -582,7 +597,7 @@ class ConvaiGRPCGetResponseProxy:
                         response.audio_response.audio_config.sample_rate_hertz,
                         response.audio_response.end_of_response)
                     
-                    print('Received sample rate: ', response.audio_response.audio_config.sample_rate_hertz)
+                    log('Received sample rate: ', response.audio_response.audio_config.sample_rate_hertz)
                 else:
                     log('Unexpected response type: {}'.format(response))
             time.sleep(0.1)
