@@ -53,6 +53,9 @@ def loadConvaiConfig():
         }
     except configparser.NoOptionError as e:
         raise KeyError(f'Missing configuration key in convai.env: {e}')
+    except Exception as e:
+        print(f"An error occurred while loading the Convai configuration: {e}")
+        return {}
 
     return convaiConfig
 
@@ -63,22 +66,25 @@ def updateCharBackstory(newBackstory):
     Args:
         newBackstory (str): The new backstory to update
     '''
-    config = loadConvaiConfig()
-    url = 'https://api.convai.com/character/update'
-    payload = json.dumps({
-        'charID': config['characterId'],
-        'backstory': newBackstory
-    })
-    headers = {
-        'CONVAI-API-KEY': config['apiKey'],
-        'Content-Type': 'application/json'
-    }
+    try:
+        config = loadConvaiConfig()
+        url = 'https://api.convai.com/character/update'
+        payload = json.dumps({
+            'charID': config['characterId'],
+            'backstory': newBackstory
+        })
+        headers = {
+            'CONVAI-API-KEY': config['apiKey'],
+            'Content-Type': 'application/json'
+        }
 
-    response = requests.post(url, headers=headers, data=payload)
-    if response.status_code == 200:
-        log('Character updated successfully.')
-    else:
-        log(f'Failed to update character: {response.status_code} - {response.text}')
+        response = requests.post(url, headers=headers, data=payload)
+        if response.status_code == 200:
+            log('Character updated successfully.')
+        else:
+            log(f'Failed to update character: {response.status_code} - {response.text}')
+    except Exception as e:
+        print(f"An error occurred while updating the character backstory: {e}")
 
 def appendToCharBackstory(backstoryUpdate):
     '''
@@ -88,11 +94,14 @@ def appendToCharBackstory(backstoryUpdate):
         backstoryUpdate (str): The text to append to the backstory,
                                recieved from gemini.
     '''
-    config = loadConvaiConfig()
-    currBackstory = config['baseBackstory']
-    if currBackstory:
-        newBackstory = f'{currBackstory}\n{backstoryUpdate}'
-        updateCharBackstory(newBackstory)
+    try:
+        config = loadConvaiConfig()
+        currBackstory = config['baseBackstory']
+        if currBackstory:
+            newBackstory = f'{currBackstory}\n{backstoryUpdate}'
+            updateCharBackstory(newBackstory)
+    except Exception as e:
+        print(f"An error occurred while appending to the character backstory: {e}")
 
 # ------------------------------------------------------------------------------------
 # ConvaiBackend class is a singleton class that derives from PyQt5.QtCore.QObject.
@@ -142,7 +151,7 @@ class ConvaiBackend(QObject):
         '''
         Initializes the class variables.
         '''
-        self.localAudPlayer = LocalAudioPlayer(self.onStartTalkCallback, self.onStopTalkCallback)
+        self.localAudPlayer = LocalAudioPlayer()
 
         self.audQueue = deque(maxlen=4096 * 8)
         self.audSocket = None
@@ -266,6 +275,13 @@ class ConvaiBackend(QObject):
 
         self.updateBtnText('Stop')
         self.isSendingAudSignal.emit(True)
+
+        threading.Thread(target=self.startConvaiThread, daemon=True).start()        
+
+    def startConvaiThread(self):
+        '''
+        Starts the Convai conversation in a separate thread.
+        '''
         self.startMic()
         self.convaiGRPCGetResponseProxy = ConvaiGRPCGetResponseProxy(self)
         
@@ -299,6 +315,12 @@ class ConvaiBackend(QObject):
     def stopShakespeare(self):
         '''
         Sends a stop signal to the A2F server through the control socket.
+        '''
+        threading.Thread(target=self.stopShakespeareThread, daemon=True).start()
+
+    def stopShakespeareThread(self):
+        '''
+        Starts the stop shakespeare method in a separate thread.
         '''
         try:
             self.localAudPlayer.stop()
@@ -426,15 +448,6 @@ class ConvaiBackend(QObject):
             if not self.isCapturingAudio or self.convaiGRPCGetResponseProxy is None:
                 continue
             self.readMicAndSendToGrpc(False)
-
-    def onStartTalkCallback(self):
-        self.updateBtnText('Start Talking')
-        self.setBtnEnabled(True)
-        self.isSendingAudSignal.emit(True)
-        log('Character Started Talking')
-
-    def onStopTalkCallback(self):       
-        log('Character Stopped Talking')
 
     def readMicAndSendToGrpc(self, lastWrite):
         '''

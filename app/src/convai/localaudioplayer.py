@@ -4,9 +4,7 @@ import io
 import threading
 
 class LocalAudioPlayer:
-    def __init__(self, startTalkingCallback, stopTalkingCallback):
-        self.startTalkingCallback = startTalkingCallback
-        self.stopTalkingCallback = stopTalkingCallback
+    def __init__(self):
         self.audSegment = None
         self.isPlaying = False
         self.playbackThread = None
@@ -23,7 +21,6 @@ class LocalAudioPlayer:
         if self.isPlaying:
             return
         print("LocalAudioPlayer - Started playing")
-        self.startTalkingCallback()
         self.isPlaying = True
         if self.playbackThread is None or not self.playbackThread.is_alive():
             self.playbackThread = threading.Thread(target=self._play_audio)
@@ -36,7 +33,6 @@ class LocalAudioPlayer:
             pydub_play(segment_to_play)
             if not self.audSegment:
                 self.isPlaying = False
-                self.stopTalkingCallback()
                 print("LocalAudioPlayer - Stopped playing")
 
     def pause(self):
@@ -48,4 +44,3 @@ class LocalAudioPlayer:
         if self.playbackThread:
             self.playbackThread.join()
         self.playbackThread = None
-        self.stopTalkingCallback()
