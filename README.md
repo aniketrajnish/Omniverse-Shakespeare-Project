@@ -6,7 +6,7 @@ An immersive experience allowing for real-time conversation with the digital twi
 - `Convai` API for real-time conversation. We're using voices from `ElevenLabs` to generate natural-sounding speech.
 - NVIDIA Omniverse's `Audio2Face` for facial animation as well as `DLSS` for frame generation to optimize performance.
 
-https://github.com/user-attachments/assets/eda390dc-eb70-402d-bbe2-ab4499db9b55
+https://github.com/user-attachments/assets/a5c6bad6-4440-499c-924f-e3f915e5ca15
 
 ## Setup 
 - Install NVIDIA Omniverse Launcher and Audio2Face. Follow steps 1, 2 and 4 from the instructions listed [here](https://docs.omniverse.nvidia.com/install-guide/latest/workstation-install.html).
