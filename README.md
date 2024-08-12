@@ -9,6 +9,9 @@ An immersive experience allowing for real-time conversation with the digital twi
 https://github.com/user-attachments/assets/a5c6bad6-4440-499c-924f-e3f915e5ca15
 
 ## Setup 
+
+https://github.com/user-attachments/assets/4bbda9dd-0374-48f6-9107-c716358358af
+
 - Install NVIDIA Omniverse Launcher and Audio2Face. Follow steps 1, 2 and 4 from the instructions listed [here](https://docs.omniverse.nvidia.com/install-guide/latest/workstation-install.html).
 - Ensure that you have the necessary system requirements for running Omniverse listed [here](https://docs.omniverse.nvidia.com/materials-and-rendering/latest/common/technical-requirements.html).
 
