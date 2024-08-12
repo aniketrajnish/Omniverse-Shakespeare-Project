@@ -1,11 +1,12 @@
 # Shakespeare AI : Vision + Realtime conversation + Facial Animation
 
-A immersive experience allowing for real-time conversation with the digital twin of William Shakespeare. The conversations are context-aware as well as visually engaging with facial animations. It has vision capabilities as well, giving the user the ability to show images to Shakespeare and talk about them. The model has been fine-tuned by training on over 5M+ characters of Shakespeare's works.
+An immersive experience allowing for real-time conversation with the digital twin of William Shakespeare. The conversations are context-aware as well as visually engaging with facial animations. It has vision capabilities as well, giving the user the ability to show images to Shakespeare and talk about them. The model has been fine-tuned by training on over 5M+ characters of Shakespeare's works.
 <br> The project leverages:
 - `Gemini` API for image analysis and context generation. We're using the `gemini-1.5-turbo` model.
 - `Convai` API for real-time conversation. We're using voices from `ElevenLabs` to generate natural-sounding speech.
 - NVIDIA Omniverse's `Audio2Face` for facial animation as well as `DLSS` for frame generation to optimize performance.
-<br>//video here
+
+https://github.com/user-attachments/assets/eda390dc-eb70-402d-bbe2-ab4499db9b55
 
 ## Setup 
 - Install NVIDIA Omniverse Launcher and Audio2Face. Follow steps 1, 2 and 4 from the instructions listed [here](https://docs.omniverse.nvidia.com/install-guide/latest/workstation-install.html).
