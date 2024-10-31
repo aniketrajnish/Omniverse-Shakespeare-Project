@@ -6,6 +6,9 @@ An immersive experience allowing for real-time conversation with the digital twi
 - `Convai` API for real-time conversation. We're using voices from `ElevenLabs` to generate natural-sounding speech.
 - NVIDIA Omniverse's `Audio2Face` for facial animation as well as `DLSS` for frame generation to optimize performance.
 
+> [!IMPORTANT]
+> I have cancelled the convai subscription, so the application will start throwing errors right out of the box starting Nov 11, if you need continued support email me at: [rajnish.ankt@gmail.com](mailto:rajnish.ankt@gmail.com) 
+
 https://github.com/user-attachments/assets/a5c6bad6-4440-499c-924f-e3f915e5ca15
 
 ## Setup 
